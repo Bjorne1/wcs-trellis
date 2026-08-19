@@ -191,3 +191,9 @@ tmp1/
 .playwright-mcp
 .gitnexus
 .codegraph/
+.mindfs/
+# npm 凭证：永远不要提交（token 存在 ~/.npmrc，不在仓库里）
+.npmrc
+**/.npmrc
+# 例外：这个是上游跟踪的 pnpm 配置，不含凭证
+!packages/cli/.npmrc

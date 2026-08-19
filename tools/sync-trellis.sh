@@ -153,10 +153,25 @@ fi
 
 if [ "$PUBLISH" = 1 ]; then
   step "发布到 npm (core → cli，锁步)"
+  # 必须从 ext4 镜像发布，不能从 /mnt/d 的仓库发：cli 的 prepublishOnly 是
+  # `pnpm test && pnpm run build && cp README/LICENSE .`，而 WSL 在 /mnt/d 上
+  # 跑不了 vitest（/mnt/d 根目录无法列目录，esbuild 加载 vitest.config.ts 时崩）。
+  # 镜像里测试是通的，源码与仓库一致（rsync --delete 同步）。
+  [ -d "$MIRROR/packages/cli" ] || die "镜像不存在。去掉 --no-test 让脚本先建镜像，或单独跑一次 --test-only"
+  # Windows 侧 registry 指向已停用的淘宝镜像，发布只能在 WSL 做。
+  PUB_REGISTRY="$(npm config get registry)"
+  case "$PUB_REGISTRY" in
+    https://registry.npmjs.org/*|https://registry.npmjs.org)
+      : ;;
+    *) die "当前 npm registry 是 $PUB_REGISTRY，不能往这里发布。
+      改成官方源：npm config set registry https://registry.npmjs.org/" ;;
+  esac
+  npm whoami >/dev/null 2>&1 || die "npm 未登录。先跑 npm login"
+  ok "以 $(npm whoami) 身份发布到 $PUB_REGISTRY"
   # 幂等：某个包该版本已在 npm 上就跳过，重跑不会重复发布。
-  PLAN="$(cd "$REPO" && node packages/cli/scripts/release-preflight.js publish-plan --json)" \
+  PLAN="$(cd "$MIRROR" && node packages/cli/scripts/release-preflight.js publish-plan --json)" \
     || die "publish-plan 失败"
-  NPM_TAG="$(cd "$REPO" && node packages/cli/scripts/release-preflight.js npm-tag | tail -1)"
+  NPM_TAG="$(cd "$MIRROR" && node packages/cli/scripts/release-preflight.js npm-tag | tail -1)"
   echo "  dist-tag: $NPM_TAG"
   # publish-plan --json 的结构：{version, tag, core:{publish,...}, cli:{publish,...}}
   needs() { printf '%s' "$PLAN" | python3 -c "
@@ -165,14 +180,14 @@ print('yes' if json.load(sys.stdin)['$1']['publish'] else 'no')
 "; }
   # pnpm publish 会把 workspace:* 重写成确切版本；npm publish 不会，别换。
   if [ "$(needs core)" = yes ]; then
-    run_quiet "$REPO/packages/core" "发布 core" \
+    run_quiet "$MIRROR/packages/core" "发布 core" \
       pnpm publish --access public --no-git-checks --tag "$NPM_TAG"
     ok "已发布 $CORE_NAME@$PKG_VERSION"
   else
     ok "$CORE_NAME@$PKG_VERSION 已在 npm，跳过"
   fi
   if [ "$(needs cli)" = yes ]; then
-    run_quiet "$CLI" "发布 cli" \
+    run_quiet "$MIRROR/packages/cli" "发布 cli" \
       pnpm publish --access public --no-git-checks --tag "$NPM_TAG"
     ok "已发布 $PKG_NAME@$PKG_VERSION"
   else
