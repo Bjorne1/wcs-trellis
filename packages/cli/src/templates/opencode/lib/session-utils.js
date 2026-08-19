@@ -45,9 +45,8 @@ function getTaskStatus(ctx, platformInput = null) {
   if (!taskRef) {
     return (
       "Status: NO ACTIVE TASK\n" +
-      "Next-Action: Classify the current turn before creating any Trellis task. " +
-      "Simple conversation / small task asks only whether this turn should create a Trellis task. " +
-      "Complex task asks whether task creation and planning are allowed."
+      "Next-Action: Work inline. Do not ask whether to create a Trellis task; " +
+      "create one only when the user explicitly asks for it."
     )
   }
 
@@ -98,7 +97,7 @@ function getTaskStatus(ctx, platformInput = null) {
     const nextBits = []
     if (missingComplex.length > 0) {
       nextBits.push(
-        `Lightweight task can request start review with PRD-only; complex task must add ${missingComplex.join(", ")} before start`,
+        `Planning is incomplete: add ${missingComplex.join(", ")} before start`,
       )
     } else {
       nextBits.push("Planning artifacts are present; ask for review before `task.py start`")
@@ -428,8 +427,8 @@ Trellis compact SessionStart context. Use it to orient the session; load details
   parts.push("<guidelines>")
   parts.push(
     "Task context order for implementation/check: jsonl entries -> `prd.md` -> " +
-    "`design.md if present` -> `implement.md if present`. Missing optional artifacts " +
-    "are skipped for lightweight tasks.\n"
+    "`design.md` -> `implement.md`. All three " +
+    "are required; a missing one means planning is incomplete.\n"
   )
 
   if (paths.length > 0) {

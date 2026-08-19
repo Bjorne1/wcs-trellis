@@ -217,8 +217,8 @@ def _default_prd_content(title: str, description: str | None = None) -> str:
 ## Notes
 
 - Keep `prd.md` focused on requirements, constraints, and acceptance criteria.
-- Lightweight tasks can remain PRD-only.
-- For complex tasks, add `design.md` for technical design and `implement.md` for execution planning before `task.py start`.
+- Add `design.md` for technical design and `implement.md` for the ordered slice checklist before `task.py start`. Both are required.
+- Record the task kind with `task.py set-meta <task-dir> kind <bug|feature|chore>`; it selects the red-evidence gate.
 """
 
 
@@ -521,8 +521,8 @@ def cmd_create(args: argparse.Namespace) -> int:
     print("", file=sys.stderr)
     print(colored("Next steps:", Colors.BLUE), file=sys.stderr)
     print("  - Fill prd.md with requirements and acceptance criteria", file=sys.stderr)
-    print("  - Lightweight task: PRD-only is valid", file=sys.stderr)
-    print("  - Complex task: add design.md and implement.md before task.py start", file=sys.stderr)
+    print("  - Add design.md and implement.md before task.py start (both required)", file=sys.stderr)
+    print("  - Set the task kind: task.py set-meta <task-dir> kind <bug|feature|chore>", file=sys.stderr)
     if seeded_jsonl:
         print(
             "  - Curate implement.jsonl / check.jsonl as spec/research manifests when sub-agents need context",

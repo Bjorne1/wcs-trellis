@@ -28,7 +28,7 @@ Before checking, read:
 ## Core Responsibilities
 
 1. **Get code changes** - Use git diff to get uncommitted code
-2. **Review task artifacts** - Check changes against prd.md, design.md if present, and implement.md if present
+2. **Review task artifacts** - Check changes against prd.md, design.md if present, and implement.md if present Then verify the red-evidence trail: every completed `implement.md` slice records the red output it started from, and for `meta.kind=bug` the Phase 1.2 repro command has been re-run green against the full scenario. A slice claiming green with no recorded red is a finding, not a pass.
 3. **Check against specs** - Verify code follows guidelines
 4. **Self-fix** - Fix issues yourself, not just report them
 5. **Run verification** - typecheck and lint

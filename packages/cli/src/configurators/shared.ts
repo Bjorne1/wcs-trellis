@@ -246,9 +246,11 @@ const SKILL_DESCRIPTIONS: Record<string, string> = {
   "before-dev":
     "Discovers and injects project-specific coding guidelines from .trellis/spec/ before implementation begins. Reads spec indexes, pre-development checklists, and shared thinking guides for the target package. Use when starting a new coding task, before writing any code, switching to a different package, or needing to refresh project conventions and standards.",
   brainstorm:
-    "Guides collaborative requirements discovery before implementation. Creates task directory, seeds PRD, asks high-value questions one at a time, researches technical choices, and converges on MVP scope. Use when requirements are unclear, there are multiple valid approaches, or the user describes a new feature or complex task.",
+    "Guides collaborative requirements discovery before implementation. Creates task directory, seeds PRD, models the work as a decision tree and asks each round's whole question frontier at once with recommendations, researches technical choices, and converges on MVP scope plus the test seams or bug reproduction the task will be verified against. Use when requirements are unclear, there are multiple valid approaches, or the user describes a new feature or complex task.",
   check:
     "Comprehensive quality verification: spec compliance, lint, type-check, tests, cross-layer data flow, code reuse, and consistency checks. Use when code is written and needs quality verification, before committing changes, or to catch context drift during long sessions.",
+  tdd:
+    "Red-before-green contract for behavior work: build a red-capable command that asserts the exact symptom or desired behavior, watch it fail, then write the minimum code to pass, one slice at a time. Covers bug reproduction and minimisation, test-seam confirmation, and the explicit no-harness fallback. Use when reproducing a reported bug, writing a failing test, or implementing a slice of a feature that changes behavior.",
   "break-loop":
     "Deep bug analysis to break the fix-forget-repeat cycle. Analyzes root cause category, why fixes failed, prevention mechanisms, and captures knowledge into specs. Use after fixing a bug to prevent the same class of bugs.",
   "update-spec":
@@ -639,7 +641,7 @@ Try in order — stop at the first one that yields a task path:
    **Skip rows without a \`"file"\` field** (e.g. \`{"_example": "..."}\` seed rows left over from \`task.py create\` before the curator ran).
 3. Read the task's \`prd.md\` (requirements), then \`design.md\` if present (technical design), then \`implement.md\` if present (execution plan).
 
-If \`${jsonl}\` has no curated entries (only a seed row, or the file is missing), fall back to: read the task artifacts, list available specs with \`python3 ./.trellis/scripts/get_context.py --mode packages\`, and pick the specs that match the task domain yourself. Do NOT block on the missing jsonl — lightweight tasks may be PRD-only, while complex tasks may also include \`design.md\` and \`implement.md\`.
+If \`${jsonl}\` has no curated entries (only a seed row, or the file is missing), fall back to: read the task artifacts, list available specs with \`python3 ./.trellis/scripts/get_context.py --mode packages\`, and pick the specs that match the task domain yourself. Do NOT block on the missing jsonl — read \`prd.md\`, \`design.md\`, and \`implement.md\` from the task directory instead.
 
 If the resolved task path has no \`prd.md\`, ask the user what to work on; do NOT proceed without context.
 

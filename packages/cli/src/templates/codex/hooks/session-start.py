@@ -231,8 +231,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if not active.task_path:
         return (
             "Status: NO ACTIVE TASK\n"
-            "Next: Classify the current turn and ask for task-creation consent "
-            "before creating any Trellis task."
+            "Next: Work inline. Create a Trellis task only if the user explicitly asks for one."
         )
 
     task_ref = active.task_path
@@ -282,8 +281,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
             next_action = "Review planning artifacts with the user before `task.py start`."
         else:
             next_action = (
-                "Lightweight task can ask for start review with PRD-only; "
-                "complex task must add design.md and implement.md before `task.py start`."
+                "Planning is incomplete: add design.md and implement.md before `task.py start`."
             )
         return (
             f"Status: PLANNING\nTask: {task_title}\nPresent: {present_line}\n"
@@ -530,8 +528,8 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     output.write("<guidelines>\n")
     output.write(
         "Task context order for implementation/check: jsonl entries -> `prd.md` -> "
-        "`design.md if present` -> `implement.md if present`. Missing optional artifacts "
-        "are skipped for lightweight tasks.\n\n"
+        "`design.md` -> `implement.md`. All three are required; a missing one means "
+        "planning is incomplete.\n\n"
     )
 
     if spec_index_paths:

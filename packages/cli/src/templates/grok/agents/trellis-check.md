@@ -40,8 +40,9 @@ Before checking, read:
 
 1. **Get code changes** - Use git diff to get uncommitted code
 2. **Check against specs** - Verify code follows guidelines
-3. **Self-fix** - Fix issues yourself, not just report them
-4. **Run verification** - typecheck and lint
+3. **Check the red-evidence trail** - Every completed `implement.md` slice records the red output it started from, and for `meta.kind=bug` the Phase 1.2 repro command has been re-run green against the full scenario. A slice claiming green with no recorded red is a finding, not a pass.
+4. **Self-fix** - Fix issues yourself, not just report them
+5. **Run verification** - typecheck and lint
 
 ## Important
 

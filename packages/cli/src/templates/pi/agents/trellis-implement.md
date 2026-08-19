@@ -21,9 +21,19 @@ You are already the `trellis-implement` sub-agent that the main session dispatch
 1. Understand the active task requirements.
 2. Read `prd.md`, `design.md` if present, and `implement.md` if present.
 3. Read and follow the spec and research files listed in the task's `implement.jsonl`.
-4. Implement the requested change using existing project patterns.
+4. Implement the requested change red-before-green, one `implement.md` slice at a time, using existing project patterns.
 5. Run the relevant lint, typecheck, and focused tests available for the touched code.
 6. Report files changed and verification results.
+
+## Red Before Green
+
+Walk the `implement.md` slice checklist one slice at a time. Per slice: write the test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice's entry, then write the minimum code to make it pass.
+
+- Do not invent a seam that is not in `design.md` — a missing seam is a planning defect. Report it instead of improvising one.
+- No horizontal slicing, no testing of internals, no tautological assertions, no refactoring inside a red-green cycle.
+- `meta.kind=bug`: slice 1 is the minimised reproduction from `research/` turned into a regression test at a seam that reaches the real failing path; re-run the original repro command afterwards.
+- `meta.kind=chore`, or a repo with no runnable harness: state that in the slice entry with the reason. Never skip the cycle silently.
+- Load the `trellis-tdd` skill for the full contract.
 
 ## Forbidden Operations
 

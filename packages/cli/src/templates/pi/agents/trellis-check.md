@@ -19,7 +19,7 @@ You are already the `trellis-check` sub-agent that the main session dispatched. 
 ## Core Responsibilities
 
 1. Inspect the current git diff.
-2. Read `prd.md`, `design.md` if present, and `implement.md` if present.
+2. Read `prd.md`, `design.md` if present, and `implement.md` if present. Then verify the red-evidence trail: every completed `implement.md` slice records the red output it started from, and for `meta.kind=bug` the Phase 1.2 repro command has been re-run green against the full scenario. A slice claiming green with no recorded red is a finding, not a pass.
 3. Read and follow the spec and research files listed in the task's `check.jsonl`.
 4. Review all changed code against the task artifacts and project specs.
 5. Fix issues directly when they are within scope.

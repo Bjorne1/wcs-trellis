@@ -36,7 +36,7 @@ Shows the Phase Index (Plan / Execute / Finish) with routing + skill mapping.
 Phase rules (full detail in `.trellis/workflow.md`):
 
 1. Run steps **in order** within a phase — `[required]` steps must not be skipped
-2. `[once]` steps are already done if the required output exists. `prd.md` alone can be enough only for lightweight tasks; complex tasks also need `design.md` and `implement.md`.
+2. `[once]` steps are already done if the required output exists. Every task needs `prd.md`, `design.md`, and `implement.md`; `prd.md` alone means planning is unfinished.
 3. You may go back to an earlier phase if discoveries require it
 
 ## Step 4: Load the Specific Step

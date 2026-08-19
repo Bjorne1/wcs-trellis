@@ -5079,7 +5079,7 @@ print(json.dumps({
     expect(ctx.startsWith("<session-context>")).toBe(true);
     expect(ctx).toContain("Trellis compact SessionStart context");
     expect(ctx).toContain("Task context order for implementation/check");
-    expect(ctx).toContain("design.md if present");
+    expect(ctx).toContain("All three are required");
     expect(ctx).not.toContain("<sub-agent-notice>");
   });
 
@@ -6255,10 +6255,11 @@ print(len(entries))
     );
     expect(match).toBeTruthy();
     const body = match?.[1] ?? "";
-    expect(body).toMatch(/Lightweight: `prd\.md` can be enough/);
+    expect(body).not.toMatch(/Lightweight: `prd\.md` can be enough/);
     expect(body).toMatch(
-      /Complex: finish `prd\.md`, `design\.md`, and `implement\.md`/,
+      /Finish `prd\.md`, `design\.md`, and `implement\.md` — all three, every task/,
     );
+    expect(body).toContain("Red-evidence gate keyed on `task.json` `meta.kind`");
     expect(body).toContain(
       "curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start",
     );
