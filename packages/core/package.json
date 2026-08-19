@@ -1,6 +1,6 @@
 {
-  "name": "@mindfoldhq/trellis-core",
-  "version": "0.7.0-beta.3",
+  "name": "@blulotus/trellis-core",
+  "version": "0.7.0",
   "description": "Trellis core SDK — channel and task domain primitives consumed by the Trellis CLI and downstream Node services",
   "type": "module",
   "main": "./dist/index.js",
@@ -38,8 +38,7 @@
   ],
   "sideEffects": false,
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "pnpm run clean && tsc",
@@ -73,6 +72,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mindfold-ai/trellis.git"
+    "url": "https://github.com/Bjorne1/WCS-Trellis.git"
   }
 }

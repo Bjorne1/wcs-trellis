@@ -7,7 +7,7 @@ import {
   listChannelContext,
   listThreadContext,
   type ChannelScope,
-} from "@mindfoldhq/trellis-core/channel";
+} from "@blulotus/trellis-core/channel";
 
 import { parseChannelScope } from "./store/schema.js";
 

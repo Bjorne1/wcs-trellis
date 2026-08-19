@@ -21,11 +21,15 @@
 #   tools/sync-trellis.sh --win-only      只装 Windows
 #   tools/sync-trellis.sh --wsl-only      只装 WSL
 #   tools/sync-trellis.sh --test-only     只跑测试，不打包不安装
+#   tools/sync-trellis.sh --publish       构建 → 测试 → 发到 npm → 两边从 npm 装
+#                                         （需先 npm login；core 与 cli 锁步发布）
+#   tools/sync-trellis.sh --bump <type>   发布前升版本：patch|minor|major|beta|rc|promote
 #
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI="$REPO/packages/cli"
+CORE="$REPO/packages/core"
 DIST="$(cd "$REPO/.." && pwd)/wcs-trellis-dist"
 MIRROR="$HOME/.cache/wcs-trellis-build"
 
@@ -35,18 +39,23 @@ RUN_PACK=1
 INSTALL_WIN=1
 INSTALL_WSL=1
 INSTALL_DEPS=0
+PUBLISH=0
+BUMP=""
 
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-test)      RUN_TEST=0 ;;
     --install-deps) INSTALL_DEPS=1 ;;
     --win-only)     INSTALL_WSL=0 ;;
     --wsl-only)     INSTALL_WIN=0 ;;
     --test-only)    RUN_PACK=0; INSTALL_WIN=0; INSTALL_WSL=0 ;;
     --skip-build)   RUN_BUILD=0 ;;
+    --publish)      PUBLISH=1; RUN_PACK=0 ;;
+    --bump)         shift; BUMP="${1:-}"; [ -n "$BUMP" ] || { echo "--bump 需要类型：patch|minor|major|beta|rc|promote" >&2; exit 2; } ;;
     -h|--help)      awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
-    *) echo "未知参数: $arg（--help 看用法）" >&2; exit 2 ;;
+    *) echo "未知参数: $1（--help 看用法）" >&2; exit 2 ;;
   esac
+  shift
 done
 
 step() { printf '\n\033[1;36m▶ %s\033[0m\n' "$*"; }
@@ -91,9 +100,17 @@ case "$REPO$DIST" in
       DIST=$DIST" ;;
 esac
 
+if [ -n "$BUMP" ]; then
+  step "升版本 ($BUMP) — core 与 cli 锁步"
+  ( cd "$CLI" && node scripts/bump-versions.js "$BUMP" ) || die "升版本失败"
+fi
+
 PKG_VERSION="$(python3 -c "import json;print(json.load(open('$CLI/package.json'))['version'])")"
 PKG_NAME="$(python3 -c "import json;print(json.load(open('$CLI/package.json'))['name'])")"
-TGZ_NAME="$(printf '%s' "$PKG_NAME" | sed 's|^@||; s|/|-|g')-${PKG_VERSION}.tgz"
+CORE_NAME="${PKG_NAME}-core"
+tgz_of() { printf '%s-%s.tgz' "$(printf '%s' "$1" | sed 's|^@||; s|/|-|g')" "$PKG_VERSION"; }
+TGZ_NAME="$(tgz_of "$PKG_NAME")"
+CORE_TGZ_NAME="$(tgz_of "$CORE_NAME")"
 
 echo "仓库    : $REPO"
 echo "包      : $PKG_NAME@$PKG_VERSION"
@@ -134,25 +151,67 @@ if [ "$RUN_TEST" = 1 ]; then
   ok "测试通过"
 fi
 
+if [ "$PUBLISH" = 1 ]; then
+  step "发布到 npm (core → cli，锁步)"
+  # 幂等：某个包该版本已在 npm 上就跳过，重跑不会重复发布。
+  PLAN="$(cd "$REPO" && node packages/cli/scripts/release-preflight.js publish-plan --json)" \
+    || die "publish-plan 失败"
+  NPM_TAG="$(cd "$REPO" && node packages/cli/scripts/release-preflight.js npm-tag | tail -1)"
+  echo "  dist-tag: $NPM_TAG"
+  # publish-plan --json 的结构：{version, tag, core:{publish,...}, cli:{publish,...}}
+  needs() { printf '%s' "$PLAN" | python3 -c "
+import json,sys
+print('yes' if json.load(sys.stdin)['$1']['publish'] else 'no')
+"; }
+  # pnpm publish 会把 workspace:* 重写成确切版本；npm publish 不会，别换。
+  if [ "$(needs core)" = yes ]; then
+    run_quiet "$REPO/packages/core" "发布 core" \
+      pnpm publish --access public --no-git-checks --tag "$NPM_TAG"
+    ok "已发布 $CORE_NAME@$PKG_VERSION"
+  else
+    ok "$CORE_NAME@$PKG_VERSION 已在 npm，跳过"
+  fi
+  if [ "$(needs cli)" = yes ]; then
+    run_quiet "$CLI" "发布 cli" \
+      pnpm publish --access public --no-git-checks --tag "$NPM_TAG"
+    ok "已发布 $PKG_NAME@$PKG_VERSION"
+  else
+    ok "$PKG_NAME@$PKG_VERSION 已在 npm，跳过"
+  fi
+  # 装的是 registry 上的版本，不是本地 tarball
+  INSTALL_SPEC_WSL="$PKG_NAME@$PKG_VERSION"
+  INSTALL_SPEC_WIN="$PKG_NAME@$PKG_VERSION"
+fi
+
 if [ "$RUN_PACK" = 1 ]; then
-  step "Windows 打包"
+  step "Windows 打包 (core + cli)"
   mkdir -p "$DIST"
-  rm -f "$DIST/$TGZ_NAME" "$CLI/$TGZ_NAME"
+  # core 也必须打包：cli 依赖 @blulotus/trellis-core@<版本>，未发布到 npm 时
+  # 只能靠同一条 npm i 命令里的 core tarball 满足，否则报 E404。
+  rm -f "$DIST/$TGZ_NAME" "$CLI/$TGZ_NAME" "$DIST/$CORE_TGZ_NAME" "$CORE/$CORE_TGZ_NAME"
   # 不用 --pack-destination：它的值会被 pnpm 当 JSON 解析（`D:\w` 是非法转义），
   # 换成正斜杠后引号又会被 cmd 当字面量塞进路径里。所以让 pnpm 写到 cwd，
   # 再从 WSL 侧把文件移过去——完全避开跨边界的路径引号问题。
-  win_cli "打包" "pnpm pack"
+  run_quiet "$CORE" "打包 core" cmd.exe /c "pnpm pack"
+  [ -f "$CORE/$CORE_TGZ_NAME" ] || die "packages/core 下没找到 $CORE_TGZ_NAME"
+  mv "$CORE/$CORE_TGZ_NAME" "$DIST/$CORE_TGZ_NAME"
+  win_cli "打包 cli" "pnpm pack"
   [ -f "$CLI/$TGZ_NAME" ] || die "packages/cli 下没找到 $TGZ_NAME"
   mv "$CLI/$TGZ_NAME" "$DIST/$TGZ_NAME"
+  ok "$(du -h "$DIST/$CORE_TGZ_NAME" | cut -f1)  $CORE_TGZ_NAME"
   ok "$(du -h "$DIST/$TGZ_NAME" | cut -f1)  $TGZ_NAME"
 fi
+
+# 安装源：默认本地 tarball；--publish 模式下上面已改写为 registry 版本号。
+INSTALL_SPEC_WSL="${INSTALL_SPEC_WSL:-$DIST/$CORE_TGZ_NAME $DIST/$TGZ_NAME}"
+INSTALL_SPEC_WIN="${INSTALL_SPEC_WIN:-$(wslpath -m "$DIST/$CORE_TGZ_NAME") $(wslpath -m "$DIST/$TGZ_NAME")}"
 
 # 校验用：仓库刚构建出来的 workflow.md 的哈希，就是"正确答案"。
 REF_HASH="$(sha256sum "$CLI/dist/templates/trellis/workflow.md" | cut -d' ' -f1)"
 
 check_install() {
   local label="$1" root="$2"
-  local f="$root/@mindfoldhq/trellis/dist/templates/trellis/workflow.md"
+  local f="$root/$PKG_NAME/dist/templates/trellis/workflow.md"
   [ -f "$f" ] || die "$label: 装完却找不到 $f"
   local h; h="$(sha256sum "$f" | cut -d' ' -f1)"
   if [ "$h" = "$REF_HASH" ]; then
@@ -166,14 +225,15 @@ check_install() {
 
 if [ "$INSTALL_WIN" = 1 ]; then
   step "安装到 Windows 全局"
-  win "Windows npm i -g" "npm i -g $(wslpath -m "$DIST/$TGZ_NAME")"
+  win "Windows npm i -g" "npm i -g $INSTALL_SPEC_WIN"
   WIN_PREFIX="$(win_out "npm prefix -g" | tail -1)"
   check_install "Windows" "$(wslpath -u "$WIN_PREFIX")/node_modules"
 fi
 
 if [ "$INSTALL_WSL" = 1 ]; then
   step "安装到 WSL 全局"
-  npm i -g "$DIST/$TGZ_NAME" >/dev/null || die "WSL npm i -g 失败"
+  # shellcheck disable=SC2086  # 故意不加引号：可能是两个空格分隔的 tarball 路径
+  npm i -g $INSTALL_SPEC_WSL >/dev/null || die "WSL npm i -g 失败"
   check_install "WSL" "$(npm root -g)"
 fi
 

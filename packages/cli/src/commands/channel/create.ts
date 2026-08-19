@@ -4,7 +4,7 @@ import {
   resolveChannelRef,
   type ChannelScope,
   type ChannelType,
-} from "@mindfoldhq/trellis-core/channel";
+} from "@blulotus/trellis-core/channel";
 
 import {
   parseChannelScope,

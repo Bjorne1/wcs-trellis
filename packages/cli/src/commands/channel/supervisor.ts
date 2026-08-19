@@ -20,7 +20,7 @@ import type { Readable, Writable } from "node:stream";
 import {
   DEFAULT_INBOX_POLICY,
   type InboxPolicy,
-} from "@mindfoldhq/trellis-core/channel";
+} from "@blulotus/trellis-core/channel";
 
 import type { CodexSandboxMode } from "./adapters/codex.js";
 import { getAdapter, type Provider } from "./adapters/index.js";
