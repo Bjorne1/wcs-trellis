@@ -1183,7 +1183,7 @@ function runContextScript(root: string, key: string | null, args: string[]): str
   const script = join(root, ".trellis", "scripts", "get_context.py");
   if (!exists(script)) return "";
   try {
-    const py = process.platform === "win32" ? "python" : "python3";
+    const py = process.platform === "win32" ? "python" : "python";
     const result = spawnSync(py, [script, ...args], {
       cwd: root,
       env: key ? { ...process.env, TRELLIS_CONTEXT_ID: key } : process.env,

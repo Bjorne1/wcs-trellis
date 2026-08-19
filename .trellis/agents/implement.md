@@ -24,8 +24,18 @@ Before implementing, read in this order:
 
 1. **Understand specs** — read relevant spec files in `.trellis/spec/`
 2. **Understand task artifacts** — read the artifacts listed above
-3. **Implement features** — write code that follows specs and existing patterns
+3. **Implement features** — red-before-green, one `implement.md` slice at a time, following specs and existing patterns
 4. **Self-check** — run lint and typecheck on the changed scope before reporting
+
+## Red Before Green
+
+Walk the `implement.md` slice checklist one slice at a time. Per slice: write the test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice's entry, then write the minimum code to make it pass.
+
+- Do not invent a seam that is not in `design.md` — a missing seam is a planning defect. Report it instead of improvising one.
+- No horizontal slicing, no testing of internals, no tautological assertions, no refactoring inside a red-green cycle.
+- `meta.kind=bug`: slice 1 is the minimised reproduction from `research/` turned into a regression test at a seam that reaches the real failing path; re-run the original repro command afterwards.
+- `meta.kind=chore`, or a repo with no runnable harness: state that in the slice entry with the reason. Never skip the cycle silently.
+- Load the `trellis-tdd` skill for the full contract.
 
 ## Forbidden Operations
 
@@ -39,7 +49,7 @@ The supervising main session owns commits. Report what changed; do not commit on
 
 1. Read relevant specs based on task type and the files in `implement.jsonl` if present
 2. Read the task's `prd.md`, `design.md` if present, and `implement.md` if present
-3. Implement features following specs and existing patterns
+3. Implement features red-before-green, one `implement.md` slice at a time, following specs and existing patterns
 4. Run the project's lint and typecheck commands on the changed scope
 5. Report files touched, key decisions, and verification results back to the channel
 

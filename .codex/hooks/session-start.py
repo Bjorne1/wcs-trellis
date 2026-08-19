@@ -231,8 +231,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if not active.task_path:
         return (
             "Status: NO ACTIVE TASK\n"
-            "Next: Classify the current turn and ask for task-creation consent "
-            "before creating any Trellis task."
+            "Next: Work inline. Create a Trellis task only if the user explicitly asks for one."
         )
 
     task_ref = active.task_path
@@ -240,7 +239,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if active.stale or not task_dir.is_dir():
         return (
             f"Status: STALE POINTER\nTask: {task_ref}\n"
-            "Next: Task directory not found. Run: python3 ./.trellis/scripts/task.py finish"
+            "Next: Task directory not found. Run: python ./.trellis/scripts/task.py finish"
         )
 
     task_json_path = task_dir / "task.json"
@@ -257,7 +256,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if task_status == "completed":
         return (
             f"Status: COMPLETED\nTask: {task_title}\n"
-            f"Next: Archive with `python3 ./.trellis/scripts/task.py archive {task_dir.name}` "
+            f"Next: Archive with `python ./.trellis/scripts/task.py archive {task_dir.name}` "
             "or start a new task."
         )
 
@@ -282,8 +281,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
             next_action = "Review planning artifacts with the user before `task.py start`."
         else:
             next_action = (
-                "Lightweight task can ask for start review with PRD-only; "
-                "complex task must add design.md and implement.md before `task.py start`."
+                "Planning is incomplete: add design.md and implement.md before `task.py start`."
             )
         return (
             f"Status: PLANNING\nTask: {task_title}\nPresent: {present_line}\n"
@@ -401,7 +399,7 @@ def _build_compact_current_state(
         try:
             task_count = sum(1 for _ in iter_active_tasks(get_tasks_dir(repo_root)))
             lines.append(
-                f"Active tasks: {task_count} total. Use `python3 ./.trellis/scripts/task.py list --mine` only if needed."
+                f"Active tasks: {task_count} total. Use `python ./.trellis/scripts/task.py list --mine` only if needed."
             )
         except Exception:
             pass  # Optional task summary; keep compact state available.
@@ -479,7 +477,7 @@ def _build_workflow_toc(workflow_path: Path) -> str:
 
     out_lines = [
         "# Development Workflow - Session Summary",
-        "Full guide: .trellis/workflow.md. Step detail: `python3 ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.",
+        "Full guide: .trellis/workflow.md. Step detail: `python ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.",
         "",
     ]
 
@@ -530,8 +528,8 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     output.write("<guidelines>\n")
     output.write(
         "Task context order for implementation/check: jsonl entries -> `prd.md` -> "
-        "`design.md if present` -> `implement.md if present`. Missing optional artifacts "
-        "are skipped for lightweight tasks.\n\n"
+        "`design.md` -> `implement.md`. All three are required; a missing one means "
+        "planning is incomplete.\n\n"
     )
 
     if spec_index_paths:
@@ -542,7 +540,7 @@ Trellis compact SessionStart context. Use it to orient the session; load details
 
     output.write(
         "Discover more via: "
-        "`python3 ./.trellis/scripts/get_context.py --mode packages`\n"
+        "`python ./.trellis/scripts/get_context.py --mode packages`\n"
     )
     output.write("</guidelines>\n\n")
 

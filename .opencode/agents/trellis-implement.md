@@ -28,7 +28,7 @@ You are already the `trellis-implement` sub-agent that the main session dispatch
 Look for the `<!-- trellis-hook-injected -->` marker in your input above.
 
 - **If the marker is present**: task artifacts, spec, and research files have already been auto-loaded for you above. Proceed with the implementation work directly.
-- **If the marker is absent**: hook injection didn't fire (Windows + Claude Code, `--continue` resume, fork distribution, hooks disabled, etc.). Find the active task path from your dispatch prompt's first line `Active task: <path>` (or run `python3 ./.trellis/scripts/task.py current --source` as a fallback), then Read `<task-path>/implement.jsonl`, each listed file, `<task-path>/prd.md`, `<task-path>/design.md` if present, and `<task-path>/implement.md` if present before doing the work.
+- **If the marker is absent**: hook injection didn't fire (Windows + Claude Code, `--continue` resume, fork distribution, hooks disabled, etc.). Find the active task path from your dispatch prompt's first line `Active task: <path>` (or run `python ./.trellis/scripts/task.py current --source` as a fallback), then Read `<task-path>/implement.jsonl`, each listed file, `<task-path>/prd.md`, `<task-path>/design.md` if present, and `<task-path>/implement.md` if present before doing the work.
 
 ## Context
 
@@ -75,11 +75,16 @@ Read the task's prd.md, design.md if present, and implement.md if present:
 - Key points of technical design
 - Implementation order, validation commands, and rollback points
 
-### 3. Implement Features
+### 3. Implement Features — Red Before Green
 
-- Write code following specs and task artifacts
-- Follow existing code patterns
-- Only do what's required, no over-engineering
+Work the `implement.md` slice checklist one slice at a time. Per slice: write the test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice's entry, then write the minimum code to make it pass.
+
+- Do not invent a seam that is not in `design.md` — a missing seam is a planning defect. Report it instead of improvising one.
+- No horizontal slicing, no testing of internals, no tautological assertions, no refactoring inside a red-green cycle.
+- `meta.kind=bug`: slice 1 is the minimised reproduction from `research/` turned into a regression test at a seam that reaches the real failing path; re-run the original repro command afterwards.
+- `meta.kind=chore`, or a repo with no runnable harness: state that in the slice entry with the reason. Never skip the cycle silently.
+- Load the `trellis-tdd` skill for the full contract.
+- Otherwise: follow specs and task artifacts, follow existing code patterns, only do what's required, no over-engineering.
 
 ### 4. Verify
 

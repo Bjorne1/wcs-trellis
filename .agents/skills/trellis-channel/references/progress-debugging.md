@@ -41,7 +41,7 @@ To reconstruct what a model actually streamed during a turn, concatenate
 
 ```bash
 trellis channel messages <channel> --raw --kind progress --last 80 \
-  | python3 -c 'import json,sys; [print((json.loads(l).get("detail") or {}).get("text_delta",""), end="") for l in sys.stdin if l.strip()]'
+  | python -c 'import json,sys; [print((json.loads(l).get("detail") or {}).get("text_delta",""), end="") for l in sys.stdin if l.strip()]'
 ```
 
 ## Stalled Worker Diagnosis
@@ -194,7 +194,7 @@ diffing against `<worker>.inbox-cursor` while debugging the supervisor.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `trellis: command not found` | CLI not installed globally | `npm install -g @mindfoldhq/trellis` |
+| `trellis: command not found` | CLI not installed globally | `npm install -g @blulotus/trellis` |
 | `wait` exits immediately | wrong filter or identity collision | use distinct `--as`, inspect raw messages |
 | zsh errors on message text | shell interpreted punctuation | use `--stdin` or `--text-file` |
 | progress line is cut off | pretty output truncation | use `messages --raw --kind progress` |

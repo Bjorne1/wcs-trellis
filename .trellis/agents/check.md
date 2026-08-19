@@ -23,7 +23,7 @@ Before reviewing, read in this order:
 ## Core Responsibilities
 
 1. **Get the diff** — `git diff` / `git diff --staged` for uncommitted changes
-2. **Review against task artifacts** — does the diff satisfy `prd.md` (and `design.md` / `implement.md` if present)?
+2. **Review against task artifacts** — does the diff satisfy `prd.md`, `design.md`, and `implement.md`? Verify the red-evidence trail too: every completed `implement.md` slice records the red output it started from, and for `meta.kind=bug` the Phase 1.2 repro command has been re-run green against the full scenario. A slice claiming green with no recorded red is a finding, not a pass.
 3. **Review against specs** — naming, structure, type safety, error handling, conventions in `.trellis/spec/`
 4. **Self-fix** — when an issue is mechanical and small, fix it directly with the editing tools you have
 5. **Run verification** — project lint and typecheck on the changed scope

@@ -14,7 +14,7 @@ This platform does NOT auto-inject task context via hook. Before doing anything 
 Try in order — stop at the first one that yields a task path:
 
 1. **Look at the dispatch prompt** you received from the main agent. If its first line is `Active task: <path>` (e.g. `Active task: .trellis/tasks/04-17-foo`), use that path. The main agent is required to include this line on class-2 platforms.
-2. **Run** `python3 ./.trellis/scripts/task.py current --source` and read the `Current task:` line.
+2. **Run** `python ./.trellis/scripts/task.py current --source` and read the `Current task:` line.
 3. **If both fail** (no `Active task:` line in the prompt and `task.py current` returns no task), ask the user which task to work on; do NOT guess.
 
 ### Step 2: Load task context from the resolved path
@@ -24,7 +24,7 @@ Try in order — stop at the first one that yields a task path:
    **Skip rows without a `"file"` field** (e.g. `{"_example": "..."}` seed rows left over from `task.py create` before the curator ran).
 3. Read the task's `prd.md` (requirements), then `design.md` if present (technical design), then `implement.md` if present (execution plan).
 
-If `implement.jsonl` has no curated entries (only a seed row, or the file is missing), fall back to: read the task artifacts, list available specs with `python3 ./.trellis/scripts/get_context.py --mode packages`, and pick the specs that match the task domain yourself. Do NOT block on the missing jsonl — lightweight tasks may be PRD-only, while complex tasks may also include `design.md` and `implement.md`.
+If `implement.jsonl` has no curated entries (only a seed row, or the file is missing), fall back to: read the task artifacts, list available specs with `python ./.trellis/scripts/get_context.py --mode packages`, and pick the specs that match the task domain yourself. Do NOT block on the missing jsonl — read `prd.md`, `design.md`, and `implement.md` from the task directory instead.
 
 If the resolved task path has no `prd.md`, ask the user what to work on; do NOT proceed without context.
 
@@ -47,9 +47,19 @@ You are already the `trellis-implement` sub-agent that the main session dispatch
 1. Understand the active task requirements.
 2. Read `prd.md`, `design.md` if present, and `implement.md` if present.
 3. Read and follow the spec and research files listed in the task's `implement.jsonl`.
-4. Implement the requested change using existing project patterns.
+4. Implement the requested change red-before-green, one `implement.md` slice at a time, using existing project patterns.
 5. Run the relevant lint, typecheck, and focused tests available for the touched code.
 6. Report files changed and verification results.
+
+## Red Before Green
+
+Walk the `implement.md` slice checklist one slice at a time. Per slice: write the test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice's entry, then write the minimum code to make it pass.
+
+- Do not invent a seam that is not in `design.md` — a missing seam is a planning defect. Report it instead of improvising one.
+- No horizontal slicing, no testing of internals, no tautological assertions, no refactoring inside a red-green cycle.
+- `meta.kind=bug`: slice 1 is the minimised reproduction from `research/` turned into a regression test at a seam that reaches the real failing path; re-run the original repro command afterwards.
+- `meta.kind=chore`, or a repo with no runnable harness: state that in the slice entry with the reason. Never skip the cycle silently.
+- Load the `trellis-tdd` skill for the full contract.
 
 ## Forbidden Operations
 

@@ -5,7 +5,7 @@ import { execFileSync } from "child_process"
 import { platform } from "os"
 import { debugLog } from "./trellis-context.js"
 
-const PYTHON_CMD = platform() === "win32" ? "python" : "python3"
+const PYTHON_CMD = platform() === "win32" ? "python" : "python"
 
 const FIRST_REPLY_NOTICE = `<first-reply-notice>
 On the first visible assistant reply in this session, briefly acknowledge that Trellis SessionStart context loaded.
@@ -45,16 +45,15 @@ function getTaskStatus(ctx, platformInput = null) {
   if (!taskRef) {
     return (
       "Status: NO ACTIVE TASK\n" +
-      "Next-Action: Classify the current turn before creating any Trellis task. " +
-      "Simple conversation / small task asks only whether this turn should create a Trellis task. " +
-      "Complex task asks whether task creation and planning are allowed."
+      "Next-Action: Work inline. Do not ask whether to create a Trellis task; " +
+      "create one only when the user explicitly asks for it."
     )
   }
 
   const taskDir = ctx.resolveTaskDir(taskRef)
 
   if (active.stale || !taskDir || !existsSync(taskDir)) {
-    return `Status: STALE POINTER\nTask: ${taskRef}\nNext-Action: Task directory not found. Run: python3 ./.trellis/scripts/task.py finish`
+    return `Status: STALE POINTER\nTask: ${taskRef}\nNext-Action: Task directory not found. Run: python ./.trellis/scripts/task.py finish`
   }
 
   let taskData = {}
@@ -98,7 +97,7 @@ function getTaskStatus(ctx, platformInput = null) {
     const nextBits = []
     if (missingComplex.length > 0) {
       nextBits.push(
-        `Lightweight task can request start review with PRD-only; complex task must add ${missingComplex.join(", ")} before start`,
+        `Planning is incomplete: add ${missingComplex.join(", ")} before start`,
       )
     } else {
       nextBits.push("Planning artifacts are present; ask for review before `task.py start`")
@@ -332,7 +331,7 @@ function buildCompactCurrentState(ctx, platformInput, specIndexPaths) {
     try {
       const activeTasks = readdirSync(tasksDir, { withFileTypes: true })
         .filter(entry => entry.isDirectory() && entry.name !== "archive" && existsSync(join(tasksDir, entry.name, "task.json")))
-      lines.push(`Active tasks: ${activeTasks.length} total. Use \`python3 ./.trellis/scripts/task.py list --mine\` only if needed.`)
+      lines.push(`Active tasks: ${activeTasks.length} total. Use \`python ./.trellis/scripts/task.py list --mine\` only if needed.`)
     } catch {
       // Ignore task list errors
     }
@@ -394,7 +393,7 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     const allLines = workflowContent.split("\n")
     const overviewLines = [
       "# Development Workflow - Session Summary",
-      "Full guide: .trellis/workflow.md. Step detail: `python3 ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.",
+      "Full guide: .trellis/workflow.md. Step detail: `python ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.",
       "",
     ]
 
@@ -428,8 +427,8 @@ Trellis compact SessionStart context. Use it to orient the session; load details
   parts.push("<guidelines>")
   parts.push(
     "Task context order for implementation/check: jsonl entries -> `prd.md` -> " +
-    "`design.md if present` -> `implement.md if present`. Missing optional artifacts " +
-    "are skipped for lightweight tasks.\n"
+    "`design.md` -> `implement.md`. All three " +
+    "are required; a missing one means planning is incomplete.\n"
   )
 
   if (paths.length > 0) {
@@ -442,7 +441,7 @@ Trellis compact SessionStart context. Use it to orient the session; load details
 
   parts.push(
     "Discover more via: " +
-    "`python3 ./.trellis/scripts/get_context.py --mode packages`"
+    "`python ./.trellis/scripts/get_context.py --mode packages`"
   )
   parts.push("</guidelines>")
 
