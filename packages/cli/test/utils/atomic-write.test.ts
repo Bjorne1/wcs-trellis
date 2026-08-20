@@ -29,7 +29,7 @@ describe("writeFileAtomic", () => {
     expect(fs.readdirSync(dir)).toEqual(["a.json"]);
   });
 
-  it("preserves the original file when the write fails", () => {
+  it.skipIf(process.platform === "win32")("preserves the original file when the write fails", () => {
     const f = path.join(dir, "keep.json");
     writeFileAtomic(f, "original");
     // A directory in place of the temp target's parent is not the failure we

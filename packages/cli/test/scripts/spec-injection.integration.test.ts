@@ -108,10 +108,18 @@ interface StateRecord {
   complete?: boolean;
 }
 
+/** Split Python stdout on newlines, tolerating Windows CRLF. */
+function splitOutputLines(output: string): string[] {
+  return output
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n")
+    .trim()
+    .split("\n");
+}
 function readShardRecords(shard: string): StateRecord[] {
   return fs
     .readFileSync(shard, "utf-8")
-    .split("\n")
+    .split(/\r?\n/)
     .filter((line) => line.trim().length > 0)
     .map((line) => JSON.parse(line) as StateRecord);
 }
@@ -199,7 +207,7 @@ for g, p in cases:
 `,
   );
   expect(r.status, `glob probe failed: ${r.stderr}`).toBe(0);
-  return r.stdout.trim().split("\n");
+  return splitOutputLines(r.stdout);
 }
 
 /** Print `rel_path|description` lines for match_specs_for_file. */
@@ -454,7 +462,7 @@ for g in ${JSON.stringify(globs)}:
 `,
       );
       expect(valid.status, valid.stderr).toBe(0);
-      expect(valid.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(valid.stdout)).toEqual([
         "ok",
         "ok",
         "ok",
@@ -488,7 +496,7 @@ for g in ["/abs/path.ts", "a/../b.ts", "src\\\\win.ts", "", "src/app.ts"]:
 `,
       );
       expect(r.status, r.stderr).toBe(0);
-      expect(r.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(r.stdout)).toEqual([
         "err",
         "err",
         "err",
@@ -722,7 +730,7 @@ for g in ["/abs/path.ts", "a/../b.ts", "src\\\\win.ts", "", "src/app.ts"]:
 
       const r = runMatch(tmp, "src/commands/update.ts");
       expect(r.status).toBe(0);
-      expect(r.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(r.stdout)).toEqual([
         ".trellis/spec/zz-exact.md|None",
         ".trellis/spec/mm-narrow.md|command conventions",
         ".trellis/spec/aa-broad.md|None",
@@ -792,7 +800,7 @@ for root, f in ${JSON.stringify(pairs)}:
         [real, realFile],
       ]);
       expect(r.status, r.stderr).toBe(0);
-      expect(r.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(r.stdout)).toEqual([
         ".trellis/spec/cli/commands.md",
         "src/commands/update.ts",
         ".trellis/spec/cli/commands.md",
@@ -879,7 +887,7 @@ for name, value in rows:
 `,
       );
       expect(r.status, r.stderr).toBe(0);
-      expect(r.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(r.stdout)).toEqual([
         "stateless-no-record=ticket",
         "stateless-with-record=ticket",
         "first-sight=full",
@@ -910,7 +918,7 @@ for name, value in rows:
 `,
       );
       expect(r.status, r.stderr).toBe(0);
-      expect(r.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(r.stdout)).toEqual([
         "inside=1",
         "at-edge=0",
         "past=0",
@@ -936,7 +944,7 @@ print("notice=%s" % truncation_notice("a/b.md", 10).strip())
 `,
       );
       expect(r.status, r.stderr).toBe(0);
-      expect(r.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(r.stdout)).toEqual([
         "exact=10",
         // 10 code points of CJK = 30 bytes: a byte cap would have cut at 10.
         "bytes=30",
@@ -976,7 +984,7 @@ for budget in (0, 50, 120, 200, 300, 500, 800, 1200, 2000, 5000):
 `,
       );
       expect(r.status, r.stderr).toBe(0);
-      const lines = r.stdout.trim().split("\n");
+      const lines = splitOutputLines(r.stdout);
       expect(lines.length).toBe(20);
       expect(lines.filter((l) => l.includes("OVER"))).toEqual([]);
     });
@@ -991,7 +999,7 @@ print(f"v={rec['v']} version={STATE_VERSION} reset={rec['reset']}")
 `,
       );
       expect(r.status, r.stderr).toBe(0);
-      expect(r.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(r.stdout)).toEqual([
         "mode,reset,sha256,spec,ts,v",
         "v=2 version=2 reset=r-1",
       ]);
@@ -1541,7 +1549,9 @@ print(f"v={rec['v']} version={STATE_VERSION} reset={rec['reset']}")
         expect([...ctx].length).toBeLessThanOrEqual(2000);
         expect(ctx).toContain("<spec-index>");
         expect(ctx).toMatch(
-          /- \(\+\d+ more governing specs? over budget — run python3 \.\/\.trellis\/scripts\/get_context\.py --mode spec --file src\/app\.ts to list them\)/,
+          new RegExp(
+            `- \\(\\+\\d+ more governing specs? over budget — run ${process.platform === "win32" ? "python" : "python3"} \\./\\.trellis/scripts/get_context\\.py --mode spec --file src/app\\.ts to list them\\)`,
+          ),
         );
         expect(ctx).toContain("</spec-index>");
       });
@@ -1896,7 +1906,7 @@ print(f"v={rec['v']} version={STATE_VERSION} reset={rec['reset']}")
         expect(fs.existsSync(agedShard)).toBe(true);
       });
 
-      it("F7: a symlinked project dir cannot walk the GC out of its own base", () => {
+      it.skipIf(process.platform === "win32")("F7: a symlinked project dir cannot walk the GC out of its own base", () => {
         writeGoverningSpec();
 
         const base = stateBase(tmp);
@@ -2375,7 +2385,7 @@ print(f"v={rec['v']} version={STATE_VERSION} reset={rec['reset']}")
         "src/commands/update.ts",
       ]);
       expect(r.status).toBe(0);
-      expect(r.stdout.trim().split("\n")).toEqual([
+      expect(splitOutputLines(r.stdout)).toEqual([
         ".trellis/spec/cli/commands.md — command conventions",
         ".trellis/spec/zz.md — (no description)",
       ]);

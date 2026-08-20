@@ -42,6 +42,15 @@ describe("task_context.py Python compatibility", () => {
   });
 });
 
+/** Split Python stdout on newlines, tolerating Windows CRLF. */
+function splitOutputLines(output: string): string[] {
+  return output.replace(/\r\n/g, "\n").trim().split("\n");
+}
+
+/** True when `haystack` contains `needle`, tolerating CRLF in the haystack. */
+function containsWithLf(haystack: string, needle: string): boolean {
+  return haystack.replace(/\r\n/g, "\n").includes(needle);
+}
 function hasPython(): boolean {
   try {
     execFileSync("python3", ["--version"], { stdio: "ignore" });
@@ -292,7 +301,7 @@ print(mod.truncate_utf8(data, len(data)) == data)
 print(mod.truncate_utf8(data, len(data) + 5) == data)
 `,
         );
-        expect(out.trim().split("\n")).toEqual(["True", "True"]);
+        expect(splitOutputLines(out)).toEqual(["True", "True"]);
       });
 
       it("truncates ASCII data exactly at the cap (1 byte over cap)", () => {
@@ -320,7 +329,7 @@ print("all-valid")
 print(mod.truncate_utf8(data, 4).decode("utf-8"))
 `,
         );
-        const lines = out.trim().split("\n");
+        const lines = splitOutputLines(out);
         expect(lines[0]).toBe("all-valid");
         expect(lines[1]).toBe("caf");
       });
@@ -400,10 +409,12 @@ print("all-valid")
           tmp,
           `print(mod.get_implement_context(REPO_ROOT, ${JSON.stringify(relTask)}))`,
         );
-        expect(out).toContain("=== small.md ===\nsmall spec content");
-        expect(out).toContain(
-          `=== ${relTask}/prd.md (Requirements) ===\nprd body`,
+        expect(containsWithLf(out, "=== small.md ===\nsmall spec content")).toBe(
+          true,
         );
+        expect(
+          containsWithLf(out, `=== ${relTask}/prd.md (Requirements) ===\nprd body`),
+        ).toBe(true);
         expect(out).not.toContain("[Trellis: truncated");
         expect(out).not.toContain("[Trellis: not inlined");
       });
@@ -476,7 +487,7 @@ print("all-valid")
           `print(mod.get_implement_context(REPO_ROOT, ${JSON.stringify(relTask)}))`,
         );
 
-        expect(out).toContain(`=== multibyte.md ===\n${multiByteContent}`);
+        expect(containsWithLf(out, `=== multibyte.md ===\n${multiByteContent}`)).toBe(true);
         expect(out).not.toContain("[Trellis: not inlined (binary file)");
       });
 
@@ -561,7 +572,7 @@ print("all-valid")
           tmp,
           `print(mod.get_implement_context(REPO_ROOT, ${JSON.stringify(relTask)}))`,
         );
-        expect(out).toContain("=== f1.txt ===\n" + "1".repeat(50));
+        expect(containsWithLf(out, "=== f1.txt ===\n" + "1".repeat(50))).toBe(true);
         expect(out).toContain(
           "[Trellis: not inlined (total context limit reached) — f2.txt (50 bytes): second]",
         );
@@ -594,7 +605,7 @@ print("all-valid")
           tmp,
           `print(mod.get_implement_context(REPO_ROOT, ${JSON.stringify(relTask)}))`,
         );
-        expect(out).toContain("=== big.txt ===\n" + bigContent);
+        expect(containsWithLf(out, "=== big.txt ===\n" + bigContent)).toBe(true);
         expect(out).not.toContain("[Trellis: not inlined");
       });
 

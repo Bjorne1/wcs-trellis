@@ -57,6 +57,16 @@ function setupRepo(tmp: string): void {
       "",
     ].join("\n"),
   );
+  // Shared hooks are opt-in: they emit nothing until the session is engaged.
+  // `runHook` always uses session_id "test-session" with CLAUDE_PROJECT_DIR,
+  // so mark that exact context key engaged here.
+  const engagedDir = path.join(tmp, ".trellis", ".runtime", "engaged");
+  fs.mkdirSync(engagedDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(engagedDir, "claude_test-session.json"),
+    JSON.stringify({ engaged: true, platform: "claude" }, null, 2),
+    "utf-8",
+  );
 }
 
 function writeConfig(tmp: string, yaml: string): void {
@@ -77,7 +87,7 @@ function runHook(
       session_id: "test-session",
       prompt,
     }),
-    env: { ...process.env, CLAUDE_PROJECT_DIR: tmp },
+    env: { ...process.env, CLAUDE_PROJECT_DIR: tmp, KIRO_PROJECT_DIR: "" },
   });
   return { stdout: r.stdout, stderr: r.stderr, status: r.status };
 }
@@ -291,7 +301,7 @@ describeFn("no-trellis skip keyword (issue #427)", () => {
             session_id: "test-session",
             prompt: "no-trellis",
           }),
-          env: { ...process.env, CLAUDE_PROJECT_DIR: tmp },
+          env: { ...process.env, CLAUDE_PROJECT_DIR: tmp, KIRO_PROJECT_DIR: "" },
         },
       );
       expect(r.status).toBe(0);

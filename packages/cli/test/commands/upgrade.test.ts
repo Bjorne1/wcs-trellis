@@ -79,15 +79,27 @@ describe("upgrade command", () => {
 
     await upgrade({ tag: "latest" }, runner);
 
-    expect(runner).toHaveBeenCalledWith(
-      "npm",
-      ["install", "-g", "@blulotus/trellis@latest"],
-      { stdio: "inherit", shell: false },
-    );
+    if (process.platform === "win32") {
+      expect(runner).toHaveBeenCalledWith(
+        "cmd.exe",
+        ["/d", "/s", "/c", "npm install -g @blulotus/trellis@latest"],
+        { stdio: "inherit", shell: false },
+      );
+    } else {
+      expect(runner).toHaveBeenCalledWith(
+        "npm",
+        ["install", "-g", "@blulotus/trellis@latest"],
+        { stdio: "inherit", shell: false },
+      );
+    }
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining("trellis --version"),
     );
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("which trellis"));
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining(
+        process.platform === "win32" ? "where trellis" : "which trellis",
+      ),
+    );
 
     log.mockRestore();
   });
@@ -97,7 +109,11 @@ describe("upgrade command", () => {
     const runner = vi.fn(() => ({ status: 1, signal: null }));
 
     await expect(upgrade({ tag: "latest" }, runner)).rejects.toThrow(
-      /npm install failed with exit code 1\.[\s\S]*Troubleshooting:[\s\S]*Manual command: npm install -g @blulotus\/trellis@latest[\s\S]*npm config get prefix[\s\S]*which trellis/,
+      new RegExp(
+        `npm install failed with exit code 1\\.[\\s\\S]*Troubleshooting:[\\s\\S]*Manual command: npm install -g @blulotus\\/trellis@latest[\\s\\S]*npm config get prefix[\\s\\S]*${
+          process.platform === "win32" ? "where" : "which"
+        } trellis`,
+      ),
     );
 
     log.mockRestore();
