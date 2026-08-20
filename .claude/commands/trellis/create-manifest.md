@@ -155,19 +155,7 @@ Verify:
 
 1. `packages/cli/src/migrations/manifests/<version>.json` exists and has valid JSON.
 2. Manifest `changelog` renders as real newlines.
-3. **All** submodule commits are pushed before the main repo pointer commit (currently `marketplace/`). Tag-triggered CI does `git submodule update --init --recursive` and fails on the first unpushed pointer with `fatal: remote error: upload-pack: not our ref <SHA>`. Verify with:
-
-   ```bash
-   git submodule foreach 'git fetch origin -q; sha=$(git rev-parse HEAD); \
-     git merge-base --is-ancestor $sha origin/main \
-       && echo "ok $name" || echo "FAIL $name $sha not on remote"'
-   ```
-
-   Do not test this with `git ls-remote origin $sha`. `ls-remote` matches ref
-   names, so it only finds a commit that is itself a branch or tag tip. A
-   pointer to any earlier commit on `main` reports FAIL even though CI can
-   fetch it fine.
-4. `@mindfoldhq/trellis` and `@mindfoldhq/trellis-core` versions still match.
+3. `@mindfoldhq/trellis` and `@mindfoldhq/trellis-core` versions still match.
 
 ## Step 9: Publish Through CI
 
