@@ -7,85 +7,18 @@
 /**
  * Supported AI coding tools
  */
-export type AITool =
-  | "claude-code"
-  | "cursor"
-  | "opencode"
-  | "codex"
-  | "kilo"
-  | "kiro"
-  | "gemini"
-  | "antigravity"
-  | "devin"
-  | "qoder"
-  | "codebuddy"
-  | "copilot"
-  | "droid"
-  | "dsh"
-  | "pi"
-  | "reasonix"
-  | "zcode"
-  | "trae"
-  | "omp"
-  | "grok"
-  | "kimi"
-  | "snow";
+export type AITool = "claude-code" | "codex";
 
 /**
  * Template directory categories
  */
-export type TemplateDir =
-  | "common"
-  | "claude"
-  | "cursor"
-  | "opencode"
-  | "codex"
-  | "kilo"
-  | "kiro"
-  | "gemini"
-  | "antigravity"
-  | "devin"
-  | "qoder"
-  | "codebuddy"
-  | "copilot"
-  | "droid"
-  | "dsh"
-  | "pi"
-  | "reasonix"
-  | "zcode"
-  | "trae"
-  | "omp"
-  | "grok"
-  | "kimi"
-  | "snow";
+export type TemplateDir = "common" | "claude" | "codex";
 
 /**
- * CLI flag names for platform selection (e.g., --claude, --cursor, --kilo, --kiro, --gemini, --antigravity)
+ * CLI flag names for platform selection (`--claude`, `--codex`).
  * Must match keys in InitOptions (src/commands/init.ts)
  */
-export type CliFlag =
-  | "claude"
-  | "cursor"
-  | "opencode"
-  | "codex"
-  | "kilo"
-  | "kiro"
-  | "gemini"
-  | "antigravity"
-  | "devin"
-  | "qoder"
-  | "codebuddy"
-  | "copilot"
-  | "droid"
-  | "dsh"
-  | "pi"
-  | "reasonix"
-  | "zcode"
-  | "trae"
-  | "omp"
-  | "grok"
-  | "kimi"
-  | "snow";
+export type CliFlag = "claude" | "codex";
 
 /**
  * Template context for placeholder resolution.
@@ -93,33 +26,17 @@ export type CliFlag =
  */
 export interface TemplateContext {
   /** Prefix for cross-referencing other commands/skills */
-  cmdRefPrefix:
-    | "/trellis:"
-    | "/trellis-"
-    | "$"
-    | "/"
-    | "/skill trellis-"
-    | "/skill:trellis-"
-    | "trellis-";
+  cmdRefPrefix: "/trellis:" | "$";
   /** Description of AI executor actions shown in role tables */
-  executorAI:
-    | "Bash scripts or Task calls"
-    | "Bash scripts or tool calls"
-    | "Bash scripts or Agent calls"
-    | "Bash scripts or file reads";
+  executorAI: "Bash scripts or Task calls" | "Bash scripts or tool calls";
   /** Label for user-invocable actions */
-  userActionLabel:
-    | "Slash commands"
-    | "Skills"
-    | "Workflows"
-    | "Prompts"
-    | "Commands";
+  userActionLabel: "Slash commands" | "Skills";
   /** Platform supports spawning sub-agents with isolated context */
   agentCapable: boolean;
   /** Platform has hook system (SessionStart, PreToolUse) */
   hasHooks: boolean;
   /**
-   * CLI flag value for this platform (e.g. "claude", "codex", "kiro").
+   * CLI flag value for this platform ("claude", "codex").
    * Substituted into template commands via {{CLI_FLAG}} so rendered skill /
    * command files can pass `--platform <flag>` to scripts that need to know
    * the invoking platform, removing the need to re-detect at runtime.
@@ -128,7 +45,6 @@ export interface TemplateContext {
    */
   cliFlag: CliFlag;
 }
-
 /**
  * Configuration for an AI tool
  */
@@ -145,7 +61,7 @@ export interface AIToolConfig {
    * to the platform's managed paths automatically.
    */
   supportsAgentSkills?: boolean;
-  /** Additional managed paths beyond configDir (e.g., .github/hooks for Copilot) */
+  /** Additional managed paths beyond configDir (e.g., .codex/skills) */
   extraManagedPaths?: string[];
   /** CLI flag name for --flag options (e.g., "claude" for --claude) */
   cliFlag: CliFlag;
@@ -156,13 +72,12 @@ export interface AIToolConfig {
   /** Template context for placeholder resolution in common templates */
   templateContext: TemplateContext;
 }
-
 /**
  * Registry of all supported AI tools and their configurations.
  * This is the single source of truth for platform data.
  *
  * When adding a new platform, add an entry here and create:
- * 1. src/configurators/{platform}.ts — configure function
+ * 1. src/configurators/{platform}.ts — collect{Platform}Templates()
  * 2. src/templates/{platform}/ — template files
  * 3. Register in src/configurators/index.ts — PLATFORM_FUNCTIONS
  * 4. Add CLI flag in src/cli/index.ts
@@ -185,51 +100,13 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       cliFlag: "claude",
     },
   },
-  cursor: {
-    name: "Cursor",
-    templateDirs: ["common", "cursor"],
-    configDir: ".cursor",
-    cliFlag: "cursor",
-    defaultChecked: true,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "/trellis-",
-      executorAI: "Bash scripts or Task calls",
-      userActionLabel: "Slash commands",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "cursor",
-    },
-  },
-  opencode: {
-    name: "OpenCode",
-    templateDirs: ["common", "opencode"],
-    configDir: ".opencode",
-    cliFlag: "opencode",
-    defaultChecked: false,
-    // hasHooks: false — OpenCode has no session-start hook. The pre-v0.5.0
-    // `.opencode/commands/trellis/start.md` deprecation in
-    // migrations/manifests/0.5.0-beta.0.json assumed a hook would replace it;
-    // that never happened for OpenCode, so `resolveCommands`/`filterCommands`
-    // (see configurators/shared.ts) still generate `/start` as the live
-    // fallback command for this `agentCapable && !hasHooks` platform.
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/trellis:",
-      executorAI: "Bash scripts or Task calls",
-      userActionLabel: "Slash commands",
-      agentCapable: true,
-      hasHooks: false,
-      cliFlag: "opencode",
-    },
-  },
   codex: {
-    name: "Codex (also writes .agents/skills/ — read by Cursor, Gemini CLI, GitHub Copilot, Amp, Kimi Code)",
+    name: "Codex (also writes .agents/skills/ — the agentskills.io shared skill root)",
     templateDirs: ["common", "codex"],
     configDir: ".codex",
     supportsAgentSkills: true,
     cliFlag: "codex",
-    defaultChecked: false,
+    defaultChecked: true,
     hasPythonHooks: true,
     templateContext: {
       cmdRefPrefix: "$",
@@ -240,401 +117,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       cliFlag: "codex",
     },
   },
-  kilo: {
-    name: "Kilo CLI",
-    templateDirs: ["common", "kilo"],
-    configDir: ".kilocode",
-    cliFlag: "kilo",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/trellis:",
-      executorAI: "Bash scripts or file reads",
-      userActionLabel: "Workflows",
-      agentCapable: false,
-      hasHooks: false,
-      cliFlag: "kilo",
-    },
-  },
-  kiro: {
-    name: "Kiro Code",
-    templateDirs: ["common", "kiro"],
-    configDir: ".kiro/skills",
-    extraManagedPaths: [".kiro/agents", ".kiro/hooks"],
-    cliFlag: "kiro",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "$",
-      executorAI: "Bash scripts or tool calls",
-      userActionLabel: "Skills",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "kiro",
-    },
-  },
-  gemini: {
-    name: "Gemini CLI",
-    templateDirs: ["common", "gemini"],
-    configDir: ".gemini",
-    supportsAgentSkills: true,
-    cliFlag: "gemini",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "/trellis:",
-      executorAI: "Bash scripts or tool calls",
-      userActionLabel: "Slash commands",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "gemini",
-    },
-  },
-  antigravity: {
-    name: "Antigravity",
-    templateDirs: ["common", "antigravity"],
-    configDir: ".agent/workflows",
-    extraManagedPaths: [".agent/skills"],
-    cliFlag: "antigravity",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/",
-      executorAI: "Bash scripts or file reads",
-      userActionLabel: "Workflows",
-      agentCapable: false,
-      hasHooks: false,
-      cliFlag: "antigravity",
-    },
-  },
-  devin: {
-    name: "Devin",
-    templateDirs: ["common", "devin"],
-    configDir: ".devin/workflows",
-    extraManagedPaths: [".devin/skills"],
-    cliFlag: "devin",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/trellis-",
-      executorAI: "Bash scripts or file reads",
-      userActionLabel: "Workflows",
-      agentCapable: false,
-      hasHooks: false,
-      cliFlag: "devin",
-    },
-  },
-  qoder: {
-    name: "Qoder",
-    templateDirs: ["common", "qoder"],
-    configDir: ".qoder",
-    cliFlag: "qoder",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "$",
-      executorAI: "Bash scripts or tool calls",
-      userActionLabel: "Skills",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "qoder",
-    },
-  },
-  codebuddy: {
-    name: "CodeBuddy",
-    templateDirs: ["common", "codebuddy"],
-    configDir: ".codebuddy",
-    cliFlag: "codebuddy",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "/trellis:",
-      executorAI: "Bash scripts or Task calls",
-      userActionLabel: "Slash commands",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "codebuddy",
-    },
-  },
-  copilot: {
-    name: "GitHub Copilot",
-    templateDirs: ["common", "copilot"],
-    configDir: ".github/copilot",
-    extraManagedPaths: [
-      ".github/agents",
-      ".github/copilot-instructions.md",
-      ".github/hooks",
-      ".github/prompts",
-      ".github/skills",
-    ],
-    cliFlag: "copilot",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "/",
-      executorAI: "Bash scripts or tool calls",
-      userActionLabel: "Prompts",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "copilot",
-    },
-  },
-  droid: {
-    name: "Factory Droid",
-    templateDirs: ["common", "droid"],
-    configDir: ".factory",
-    cliFlag: "droid",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "/trellis-",
-      executorAI: "Bash scripts or Task calls",
-      userActionLabel: "Slash commands",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "droid",
-    },
-  },
-  /**
-   * DeepSeek Harness (dsh) — class-2 pull-based platform.
-   *
-   * DSH discovers skills from `<projectRoot>/.agents/skills/` (shared root,
-   * rank 200) and `<projectRoot>/.dsh/skills/` (DSH-private root, rank 100),
-   * plus user roots under `$DSH_HOME/skills` / `$DSH_AGENTS_HOME/skills`.
-   * SKILL.md frontmatter uses `name` (kebab-case) + `description`, matching
-   * Trellis's skill rendering. The model loads skills via the `skill` tool;
-   * users can load entry points by their `trellis-<name>` skill names. DSH
-   * surfaces that expose the slash pipeline may also accept `/trellis-<name>`.
-   *
-   * DSH injects project `AGENTS.md` at session start (workspace instructions)
-   * and supports isolated sub-agents through the `subagent` tool, so Trellis
-   * ships as class-2: workflow/bundled skills go to the shared `.agents/skills/`
-   * root via the neutral resolver (byte-identical to Codex/Gemini/Pi/Kimi
-   * writes), while DSH-private entry points (trellis-start / trellis-continue /
-   * trellis-finish-work) and collision-free role skills
-   * (trellis-agent-implement / trellis-agent-check / trellis-agent-research)
-   * live under `.dsh/skills/` with the pull-based prelude on implement/check.
-   *
-   * DSH has no project-level hooks/settings file Trellis may write, so
-   * hasHooks/hasPythonHooks stay false and no hook assets are emitted.
-   */
-  dsh: {
-    name: "DeepSeek Harness (dsh)",
-    templateDirs: ["common", "dsh"],
-    configDir: ".dsh",
-    supportsAgentSkills: true,
-    cliFlag: "dsh",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "trellis-",
-      executorAI: "Bash scripts or tool calls",
-      userActionLabel: "Skills",
-      agentCapable: true,
-      hasHooks: false,
-      cliFlag: "dsh",
-    },
-  },
-  pi: {
-    // Pi also writes .agents/skills/, which is read by Cursor, Gemini CLI,
-    // GitHub Copilot, Amp, and Kimi Code. Keep that detail here rather than
-    // in `name` — `name` leaks verbatim into `trellis platforms` output and
-    // init checkboxes, where a long parenthetical reads badly.
-    name: "Pi Agent",
-    templateDirs: ["common", "pi"],
-    configDir: ".pi",
-    supportsAgentSkills: true,
-    cliFlag: "pi",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/trellis-",
-      executorAI: "Bash scripts or tool calls",
-      userActionLabel: "Slash commands",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "pi",
-    },
-  },
-  reasonix: {
-    name: "Reasonix",
-    templateDirs: ["common", "reasonix"],
-    configDir: ".reasonix",
-    cliFlag: "reasonix",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/skill trellis-",
-      executorAI: "Bash scripts or tool calls",
-      userActionLabel: "Skills",
-      agentCapable: true,
-      hasHooks: false,
-      cliFlag: "reasonix",
-    },
-  },
-  zcode: {
-    name: "ZCode",
-    templateDirs: ["common", "zcode"],
-    configDir: ".zcode",
-    // `.zcode/cli/agents` is the pre-ZCode-update discovery path. Kept managed
-    // during the transition so `trellis update --migrate` (rename-dir →
-    // `.zcode/agents/`) and `trellis uninstall` can clean up the now-empty
-    // `.zcode/cli/` parent. Drop this entry once the migration has shipped and
-    // no project still holds the legacy dir. Only empty dirs are ever removed,
-    // so user files are never touched (see cleanupEmptyDirs in update.ts).
-    extraManagedPaths: [
-      ".zcode/cli/agents",
-      ".zcode/agents",
-      ".zcode/commands",
-      ".zcode/skills",
-      // Hooks assets written by configureZcode.
-      ".zcode/hooks",
-    ],
-    cliFlag: "zcode",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "/trellis:",
-      executorAI: "Bash scripts or Agent calls",
-      userActionLabel: "Skills",
-      agentCapable: true,
-      // ZCode (3.x) supports a workspace hook config at .zcode/config.json
-      // with SessionStart / UserPromptSubmit / PreToolUse events. PreToolUse
-      // can mutate sub-agent prompts, so ZCode is class-1 hook-inject.
-      hasHooks: true,
-      cliFlag: "zcode",
-    },
-  },
-  trae: {
-    name: "Trae",
-    templateDirs: ["common", "trae"],
-    configDir: ".trae",
-    cliFlag: "trae",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "/trellis-",
-      executorAI: "Bash scripts or tool calls",
-      userActionLabel: "Commands",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "trae",
-    },
-  },
-  omp: {
-    name: "Oh My Pi",
-    templateDirs: ["common", "omp"],
-    configDir: ".omp",
-    cliFlag: "omp",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/trellis:",
-      executorAI: "Bash scripts or Task calls",
-      userActionLabel: "Slash commands",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "omp",
-    },
-  },
-  /**
-   * Grok Build (xAI) — class-2 pull-based platform.
-   *
-   * Phase 0 verified (Grok 0.2.101): skills/agents/AGENTS.md load correctly;
-   * Claude-style hook `additionalContext` is NOT injected into the model.
-   * Do not set hasHooks/hasPythonHooks true until Grok consumes hook stdout.
-   * Commands are flat under `.grok/commands/trellis-*.md` (Grok slash-command layout).
-   */
-  grok: {
-    name: "Grok Build",
-    templateDirs: ["common", "grok"],
-    configDir: ".grok",
-    extraManagedPaths: [".grok/skills", ".grok/commands", ".grok/agents"],
-    cliFlag: "grok",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/trellis-",
-      executorAI: "Bash scripts or Agent calls",
-      userActionLabel: "Skills",
-      agentCapable: true,
-      hasHooks: false,
-      cliFlag: "grok",
-    },
-  },
-  /**
-   * Kimi Code CLI — class-2 pull-based platform.
-   *
-   * Kimi reads project skills from `.kimi-code/skills/` AND the shared
-   * `.agents/skills/` (agentskills.io standard), so workflow/bundled skills go
-   * to the shared root via the neutral resolver (byte-identical to
-   * Codex/Gemini/Pi writes) while user-invocable entry points
-   * (`trellis-start` / `trellis-continue` / `trellis-finish-work`, invoked as
-   * `/skill:trellis-<name>`) and the Trellis sub-agent prompts live under
-   * `.kimi-code/skills/`.
-   *
-   * Kimi has no project-level hooks/settings file Trellis may write (hooks are
-   * user-level `~/.kimi-code/config.toml` only) and no project-level custom
-   * sub-agent definitions (only the built-in coder/explore/plan sub-agents), so
-   * the Trellis agent prompts ship as skills with the pull-based prelude.
-   */
-  kimi: {
-    name: "Kimi Code",
-    templateDirs: ["common", "kimi"],
-    configDir: ".kimi-code",
-    supportsAgentSkills: true,
-    cliFlag: "kimi",
-    defaultChecked: false,
-    hasPythonHooks: false,
-    templateContext: {
-      cmdRefPrefix: "/skill:trellis-",
-      executorAI: "Bash scripts or Agent calls",
-      userActionLabel: "Slash commands",
-      agentCapable: true,
-      hasHooks: false,
-      cliFlag: "kimi",
-    },
-  },
-  /**
-   * Snow CLI - class-1 platform.
-   *
-   * Skills: `.snow/skills/` (Claude Code Skills compatible)
-   * Commands: `.snow/commands/trellis-*.json` (type: prompt)
-   * Agents: `.snow/agents/` (project discovery; no class-2 pull prelude)
-   * Hooks: `.snow/hooks/` emit additionalContext JSON (session/user/sub-agent)
-   *
-   * hasHooks=true: SessionStart injects context -> trellis-start is filtered out.
-   * hasPythonHooks=true: ships write-trellis-context.py under .snow/hooks/.
-   * Primary agent path is `.snow/agents/*.md` only (no legacy JSON fragment).
-   *
-   * CLI flag: `--snow`.
-   * Detection requires Trellis-owned template hashes under `.snow/skills`, so
-   * native Snow settings, commands, agents, or skills are not false positives.
-   */
-  snow: {
-    name: "Snow CLI",
-    templateDirs: ["common", "snow"],
-    configDir: ".snow/skills",
-    extraManagedPaths: [
-      ".snow/commands",
-      ".snow/agents",
-      ".snow/hooks",
-      ".snow/SNOW.md",
-    ],
-    cliFlag: "snow",
-    defaultChecked: false,
-    hasPythonHooks: true,
-    templateContext: {
-      cmdRefPrefix: "/trellis-",
-      executorAI: "Bash scripts or Agent calls",
-      userActionLabel: "Skills",
-      agentCapable: true,
-      hasHooks: true,
-      cliFlag: "snow",
-    },
-  },
 };
-
 /**
  * Get the configuration for a specific AI tool
  */

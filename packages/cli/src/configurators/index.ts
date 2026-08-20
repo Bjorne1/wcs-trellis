@@ -10,8 +10,6 @@
  * 4. Creating the template directory
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import {
   AI_TOOLS,
   getManagedPaths,
@@ -23,32 +21,11 @@ import { loadHashes } from "../utils/template-hash.js";
 // Platform file sets — each `collect*Templates` is the single description of
 // what its platform installs, and lives next to any residual behavior.
 import { collectClaudeTemplates, configureClaude } from "./claude.js";
-import { collectCursorTemplates } from "./cursor.js";
-import { collectOpenCodeTemplates } from "./opencode.js";
 import { collectCodexTemplates, configureCodex } from "./codex.js";
-import { collectKiloTemplates } from "./kilo.js";
-import { collectKiroTemplates } from "./kiro.js";
-import { collectGeminiTemplates } from "./gemini.js";
-import { collectAntigravityTemplates } from "./antigravity.js";
-import { collectDevinTemplates } from "./devin.js";
-import { collectQoderTemplates } from "./qoder.js";
-import { collectCodebuddyTemplates } from "./codebuddy.js";
-import { collectCopilotTemplates } from "./copilot.js";
-import { collectDroidTemplates } from "./droid.js";
-import { collectDshTemplates } from "./dsh.js";
-import { collectPiTemplates } from "./pi.js";
-import { collectReasonixTemplates } from "./reasonix.js";
-import { collectZcodeTemplates, configureZcode } from "./zcode.js";
-import { collectTraeTemplates } from "./trae.js";
-import { collectOmpTemplates } from "./omp.js";
-import { collectGrokTemplates } from "./grok.js";
-import { collectKimiTemplates } from "./kimi.js";
-import { collectSnowTemplates } from "./snow.js";
 
 // Shared utilities
 import {
   renderTemplateMap,
-  writeTemplateMap,
   type PlatformConfigureOptions,
 } from "./shared.js";
 
@@ -64,50 +41,19 @@ interface PlatformFunctions {
 }
 
 /**
- * Registry entry for a platform whose configuration is exactly "write these
- * files": `configure` is derived from `collectTemplates`, so the file set is
- * described once and `trellis init` and `trellis update` cannot disagree
- * about it.
- *
- * The three platforms that also do something a `Map<path, content>` cannot
- * express (claude-code, codex, zcode) spell out both fields and keep that
- * behavior inline in their own configurator.
+ * Both remaining platforms do something a `Map<path, content>` cannot express
+ * — claude-code the opt-in `--with-statusline` file, codex the intentionally
+ * empty `.codex/skills/` directory plus a stderr notice — so each spells out
+ * `configure` and `collectTemplates` and keeps that residual behavior inline in
+ * its own configurator. A platform whose configuration is exactly "write these
+ * files" only needs `collectTemplates` and a `configure` derived from it.
  */
-function fromTemplates(
-  collectTemplates: () => Map<string, string>,
-): PlatformFunctions {
-  return {
-    configure: (cwd) => writeTemplateMap(cwd, collectTemplates()),
-    collectTemplates,
-  };
-}
-
 const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
   "claude-code": {
     configure: configureClaude,
     collectTemplates: collectClaudeTemplates,
   },
-  cursor: fromTemplates(collectCursorTemplates),
-  opencode: fromTemplates(collectOpenCodeTemplates),
   codex: { configure: configureCodex, collectTemplates: collectCodexTemplates },
-  kilo: fromTemplates(collectKiloTemplates),
-  kiro: fromTemplates(collectKiroTemplates),
-  gemini: fromTemplates(collectGeminiTemplates),
-  antigravity: fromTemplates(collectAntigravityTemplates),
-  devin: fromTemplates(collectDevinTemplates),
-  qoder: fromTemplates(collectQoderTemplates),
-  codebuddy: fromTemplates(collectCodebuddyTemplates),
-  copilot: fromTemplates(collectCopilotTemplates),
-  droid: fromTemplates(collectDroidTemplates),
-  dsh: fromTemplates(collectDshTemplates),
-  pi: fromTemplates(collectPiTemplates),
-  reasonix: fromTemplates(collectReasonixTemplates),
-  zcode: { configure: configureZcode, collectTemplates: collectZcodeTemplates },
-  trae: fromTemplates(collectTraeTemplates),
-  omp: fromTemplates(collectOmpTemplates),
-  grok: fromTemplates(collectGrokTemplates),
-  kimi: fromTemplates(collectKimiTemplates),
-  snow: fromTemplates(collectSnowTemplates),
 };
 
 // =============================================================================
@@ -151,23 +97,6 @@ export function getConfiguredPlatforms(cwd: string): Set<AITool> {
     if (hasTrackedTemplate) {
       platforms.add(id);
     }
-  }
-  // Back-compat: Windsurf was renamed to Devin. Require Trellis ownership or
-  // a Trellis-namespaced workflow so a native Windsurf directory is not enough.
-  const legacyWindsurfRoot = ".windsurf/workflows";
-  const hasTrackedWindsurfTemplate = Object.keys(hashes).some((relativePath) =>
-    relativePath.startsWith(`${legacyWindsurfRoot}/trellis-`),
-  );
-  let hasLegacyWindsurfTemplate = false;
-  try {
-    hasLegacyWindsurfTemplate = fs
-      .readdirSync(path.join(cwd, legacyWindsurfRoot))
-      .some((name) => name.startsWith("trellis-"));
-  } catch {
-    // Missing or unreadable legacy directory is not a configured platform.
-  }
-  if (hasTrackedWindsurfTemplate || hasLegacyWindsurfTemplate) {
-    platforms.add("devin");
   }
   return platforms;
 }

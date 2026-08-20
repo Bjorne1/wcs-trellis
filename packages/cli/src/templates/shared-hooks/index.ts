@@ -26,24 +26,11 @@ export interface HookScript {
 
 export type SharedHookName =
   | "session-start.py"
-  | "inject-shell-session-context.py"
   | "inject-workflow-state.py"
   | "inject-subagent-context.py"
   | "inject-spec-context.py";
 
-export type SharedHookPlatform =
-  | "claude"
-  | "cursor"
-  | "codex"
-  | "opencode"
-  | "gemini"
-  | "qoder"
-  | "copilot"
-  | "codebuddy"
-  | "droid"
-  | "kiro"
-  | "trae"
-  | "zcode";
+export type SharedHookPlatform = "claude" | "codex";
 
 /**
  * Which shared hooks each platform actually invokes. Single source of truth
@@ -51,54 +38,22 @@ export type SharedHookPlatform =
  * both `trellis init` and `trellis update` consume the map it returns.
  *
  * Routing rules encoded here:
- * - `session-start.py` — shipped by every platform with a SessionStart
- *   hook event *except* codex + copilot, which bundle a platform-specific
- *   session-start.py under their own template dirs.
- * - `inject-workflow-state.py` — every platform with a UserPromptSubmit
- *   (or equivalent) event. Kiro + codex self-included; platforms without
- *   per-turn main-session hooks are excluded.
+ * - `session-start.py` — shipped by platforms with a SessionStart hook event.
+ *   Codex is excluded: it bundles a platform-specific session-start.py under
+ *   its own template dir.
+ * - `inject-workflow-state.py` — platforms with a UserPromptSubmit (or
+ *   equivalent) per-turn event.
  * - `inject-subagent-context.py` — platforms with native sub-agent context
- *   delivery. Most use a PreToolUse prompt mutation; Codex uses its
- *   SubagentStart `additionalContext` event. Class-2 (pull-based) platforms
- *   such as copilot, gemini, qoder, and trae still load context from a
- *   self-loading agent profile.
- * - `inject-shell-session-context.py` — platforms with a hook that fires
- *   *before* a shell command and receives both the session id and the pending
- *   command. That hook is the only channel by which session identity reaches
- *   `task.py`, which runs in the shell child: no platform researched exports a
- *   session id into that child (2026-08-05 audit of 21 platforms). Declaring a
- *   platform here also requires an entry in its own hook config template —
- *   `shared-hooks.test.ts` fails the build when the two disagree, because a
- *   script on disk that nothing invokes is indistinguishable from success.
- *   Kiro is deliberately absent: its two hook surfaces (CLI agent JSON
- *   `hooks.{agentSpawn,userPromptSubmit}` and IDE `.kiro.hook` `when.type`)
- *   publish no pre-tool trigger, and an unknown key in the agent JSON risks
- *   the whole agent failing to load. Settle it by running Kiro and checking
- *   its hook trigger list before adding it.
- * - Kiro supports per-turn + spawn hooks on both surfaces (per the official
- *   docs https://kiro.dev/docs/cli/hooks/): the CLI custom agent declares
- *   `hooks.userPromptSubmit` + `hooks.agentSpawn`, and the IDE declares a
- *   `.kiro.hook` with `when.type=promptSubmit`. So Kiro ships
- *   `session-start.py` (agentSpawn overview), `inject-workflow-state.py`
- *   (per-turn breadcrumb), and `inject-subagent-context.py` (sub-agent
- *   spawn). The scripts emit a plain-text Kiro branch — Kiro adds a hook's
- *   stdout directly to the conversation context (no JSON envelope).
+ *   delivery. Claude Code uses a PreToolUse prompt mutation; Codex uses its
+ *   SubagentStart `additionalContext` event.
  * - `inject-spec-context.py` — path-scoped spec injection. Claude Code uses
- *   PostToolUse Read/Edit/Write/MultiEdit; Codex and OpenCode use PreToolUse.
- *   Codex passes the native apply_patch payload directly. OpenCode's plugin
- *   adapts write/edit/apply_patch calls and blocks a FULL emission once so the
- *   model sees the specs before retrying. Class-2 platforms use
- *   `get_context.py --mode spec` pull mode instead.
+ *   PostToolUse Read/Edit/Write/MultiEdit; Codex uses PreToolUse and passes the
+ *   native apply_patch payload directly.
  * - Claude Code `statusLine` is intentionally not installed by default.
  *   Users can add their own statusLine command in `.claude/settings.json`,
  *   or opt in to the Trellis one via `trellis init --with-statusline`
  *   (installed from `templates/claude/hooks/`, not from this table — no
  *   other platform has a statusLine event).
- * - ZCode (3.x) ships a workspace hook config at `.zcode/config.json` covering
- *   SessionStart + UserPromptSubmit in the main session, plus PreToolUse for
- *   `Agent|Task`. Live probing confirmed `hookSpecificOutput.updatedInput`
- *   reaches the sub-agent prompt, so ZCode is class-1 and ships
- *   `inject-subagent-context.py`.
  */
 export const SHARED_HOOKS_BY_PLATFORM: Record<
   SharedHookPlatform,
@@ -110,55 +65,10 @@ export const SHARED_HOOKS_BY_PLATFORM: Record<
     "inject-subagent-context.py",
     "inject-spec-context.py",
   ],
-  cursor: [
-    "session-start.py",
-    "inject-shell-session-context.py",
-    "inject-subagent-context.py",
-  ],
   codex: [
     "inject-workflow-state.py",
     "inject-subagent-context.py",
     "inject-spec-context.py",
-  ],
-  opencode: ["inject-spec-context.py"],
-  gemini: [
-    "session-start.py",
-    "inject-shell-session-context.py",
-    "inject-workflow-state.py",
-  ],
-  qoder: [
-    "session-start.py",
-    "inject-shell-session-context.py",
-    "inject-workflow-state.py",
-  ],
-  copilot: ["inject-workflow-state.py"],
-  codebuddy: [
-    "session-start.py",
-    "inject-shell-session-context.py",
-    "inject-workflow-state.py",
-    "inject-subagent-context.py",
-  ],
-  droid: [
-    "session-start.py",
-    "inject-shell-session-context.py",
-    "inject-workflow-state.py",
-    "inject-subagent-context.py",
-  ],
-  kiro: [
-    "session-start.py",
-    "inject-workflow-state.py",
-    "inject-subagent-context.py",
-  ],
-  trae: [
-    "session-start.py",
-    "inject-shell-session-context.py",
-    "inject-workflow-state.py",
-  ],
-  zcode: [
-    "session-start.py",
-    "inject-shell-session-context.py",
-    "inject-workflow-state.py",
-    "inject-subagent-context.py",
   ],
 };
 
