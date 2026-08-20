@@ -7,13 +7,7 @@
  * reads channel events.
  */
 
-export type MemSourceKind =
-  | "claude"
-  | "codex"
-  | "grok"
-  | "opencode"
-  | "pi"
-  | "zcode";
+export type MemSourceKind = "claude" | "codex";
 export type MemSourceFilter = MemSourceKind | "all";
 export type MemPhase = "brainstorm" | "implement" | "all";
 export type DialogueRole = "user" | "assistant";
@@ -55,7 +49,7 @@ export interface MemSessionInfo {
   created?: string;
   updated?: string;
   filePath: string;
-  /** OpenCode only: parent session id (sub-agent chain). */
+  /** Parent session id, when the platform records a sub-agent chain. */
   parent_id?: string;
 }
 

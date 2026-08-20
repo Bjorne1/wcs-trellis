@@ -152,21 +152,19 @@ of that replay model.
 
 **Example** (`cli_adapter.py`):
 ```python
-# BAD: "gemini" falls through to else, returns "claude"
+# BAD: a newly added "codex" falls through to else, returns "claude"
 @property
 def cli_name(self) -> str:
-    if self.platform == "opencode":
-        return "opencode"
+    if self.platform == "claude":
+        return "claude"
     else:
-        return "claude"  # gemini silently gets "claude"!
+        return "claude"  # codex silently gets "claude"!
 
 # GOOD: explicit branch for every platform
 @property
 def cli_name(self) -> str:
-    if self.platform == "opencode":
-        return "opencode"
-    elif self.platform == "gemini":
-        return "gemini"
+    if self.platform == "codex":
+        return "codex"
     else:
         return "claude"
 ```

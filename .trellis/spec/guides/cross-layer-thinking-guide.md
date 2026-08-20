@@ -131,10 +131,9 @@ In Trellis, command templates (e.g., `record-session.md`) exist in **multiple pl
 
 - [ ] Find all platforms with the same command: `find src/templates/*/commands/trellis/ -name "<command>.*"`
 - [ ] Update all platform copies (Markdown `.md` and TOML `.toml`)
-- [ ] For Gemini TOML: adapt line continuations (`\\` vs `\`) and triple-quoted strings
 - [ ] Run `/trellis:check-cross-layer` to verify nothing was missed
 
-**Real-world example**: Updated `record-session.md` in Claude to use `--mode record`, but forgot iFlow, Kilo, OpenCode, and Gemini — caught by cross-layer check.
+**Real-world example**: Updated `record-session.md` for Claude Code to use `--mode record`, but forgot the Codex copy — caught by cross-layer check.
 
 ---
 

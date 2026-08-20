@@ -17,7 +17,7 @@ How the uninstall command removes every Trellis-written file from a project, scr
 
 `trellis uninstall` is the inverse of `trellis init` / `trellis update`: it removes everything Trellis wrote and leaves everything Trellis did not.
 
-- **Manifest is authoritative.** The single source of truth for "what trellis wrote" is `.trellis/.template-hashes.json`. Files outside that manifest are never touched, regardless of where they live (e.g. user-added scripts under `.claude/hooks/`, custom commands under `.cursor/commands/`).
+- **Manifest is authoritative.** The single source of truth for "what trellis wrote" is `.trellis/.template-hashes.json`. Files outside that manifest are never touched, regardless of where they live (e.g. user-added scripts under `.claude/hooks/`, custom commands under `.claude/commands/`).
 - **No user-modification gate.** Whether the user has edited a manifest-listed file or not, it is removed. `update` semantics (warn / preserve modified files) do not apply here — the user's intent is to remove Trellis entirely.
 - **Two file classes.** Manifest entries fall into:
   1. *Opaque content files* (most `.py`, `.md`, `.toml`, `.json` agents, etc.) — unlinked outright.
@@ -43,7 +43,7 @@ trellis uninstall [-y|--yes] [--dry-run]
 | `-y, --yes` | boolean | Skip the `Continue?` confirmation prompt. |
 | `--dry-run` | boolean | Print the plan and exit without modifying anything. |
 
-There are no `--platform <name>` or `--keep-config` flags. The design is intentionally all-or-nothing: partial uninstall (e.g. "remove Trellis from Cursor only, leave Claude Code") is **out of scope** because the manifest does not partition by platform — see *Common Pitfalls* below.
+There are no `--platform <name>` or `--keep-config` flags. The design is intentionally all-or-nothing: partial uninstall (e.g. "remove Trellis from Codex only, leave Claude Code") is **out of scope** because the manifest does not partition by platform — see *Common Pitfalls* below.
 
 The command surface lives in `commands/uninstall.ts:uninstall` and is the only export consumed by `cli/index.ts`. The `UninstallOptions` interface in the same file mirrors the two CLI flags 1:1.
 
@@ -83,19 +83,11 @@ A `Map<posixPath, StructuredFileSpec>` built once per command invocation. Each e
 | Manifest path | Scrubber | Hooks-JSON mode |
 |---|---|---|
 | `.claude/settings.json` | `scrubHooksJson` | `nested` |
-| `.gemini/settings.json` | `scrubHooksJson` | `nested` |
-| `.factory/settings.json` | `scrubHooksJson` | `nested` |
-| `.codebuddy/settings.json` | `scrubHooksJson` | `nested` |
-| `.qoder/settings.json` | `scrubHooksJson` | `nested` |
 | `.codex/hooks.json` | `scrubHooksJson` | `nested` |
-| `.cursor/hooks.json` | `scrubHooksJson` | `flat` |
-| `.github/copilot/hooks.json` | `scrubHooksJson` | `flat` |
-| `.opencode/package.json` | `scrubOpencodePackageJson` | n/a |
-| `.pi/settings.json` | `scrubPiSettings` | n/a |
 | `.codex/config.toml` | `scrubCodexConfigToml` | n/a |
 | `AGENTS.md` | `scrubManagedMarkdownBlock` | n/a |
 
-`AGENTS.md` is not a hooks-JSON file — it's a mixed-ownership markdown file. Trellis owns only the `<!-- TRELLIS:START/END -->` block (markers exported from `update.ts`); the user owns everything outside it. It shares `scrubManagedMarkdownBlock` with the Copilot-instructions scrubber: strip the block, keep the rest, and only fall through to deletion (`fullyEmpty`) when nothing user-authored remains. Before this spec was added, `AGENTS.md` had no dispatch-table row and was `unlinkSync`'d whole by the plain-deletion path, destroying any pre-existing user content outside the block.
+`AGENTS.md` is not a hooks-JSON file — it's a mixed-ownership markdown file. Trellis owns only the `<!-- TRELLIS:START/END -->` block (markers exported from `update.ts`); the user owns everything outside it. `scrubManagedMarkdownBlock` handles it: strip the block, keep the rest, and only fall through to deletion (`fullyEmpty`) when nothing user-authored remains. Before this spec was added, `AGENTS.md` had no dispatch-table row and was `unlinkSync`'d whole by the plain-deletion path, destroying any pre-existing user content outside the block.
 
 Adding a new platform that ships a structured config file means adding one row to this table — the planner picks it up automatically. **Per-file scrub semantics live in `uninstall-scrubbers.md`; do not duplicate them here.**
 
@@ -149,7 +141,7 @@ While deleting, the parent directory of each deleted file is added to a `Set<str
 
 ### Phase 4 — Prune empty managed sub-directories
 
-For every dir in `deletedDirCandidates`, call `cleanupEmptyDirs(cwd, dirPosix)` (re-exported from `commands/update.ts`). This walks the directory bottom-up and removes any sub-directory that became empty after Phase 2 — but it explicitly **refuses to remove managed root dirs** (`.claude`, `.cursor`, `.codex`, etc.) because the normal `update` flow needs them to persist.
+For every dir in `deletedDirCandidates`, call `cleanupEmptyDirs(cwd, dirPosix)` (re-exported from `commands/update.ts`). This walks the directory bottom-up and removes any sub-directory that became empty after Phase 2 — but it explicitly **refuses to remove managed root dirs** (`.claude`, `.codex`, `.agents/skills`) because the normal `update` flow needs them to persist.
 
 ### Phase 5 — Prune empty managed root directories
 
@@ -201,7 +193,7 @@ See [Filesystem Safety § Destructive-op ownership / backup gate](./filesystem-s
 
 ### What `uninstall` will NOT do
 
-- **Touch any file outside `.template-hashes.json`.** User-added scripts inside `.claude/hooks/`, custom commands inside `.cursor/commands/`, project-local agents the user defined themselves — all preserved. Test `#7` in `test/commands/uninstall.integration.test.ts` covers this.
+- **Touch any file outside `.template-hashes.json`.** User-added scripts inside `.claude/hooks/`, custom commands inside `.claude/commands/`, project-local agents the user defined themselves — all preserved. Test `#7` in `test/commands/uninstall.integration.test.ts` covers this.
 - **Mutate user-authored sections of structured config.** Scrubbers strip *only* trellis-emitted entries. Other deps in `package.json`, other event hooks in `settings.json`, custom `[features]` table entries in `config.toml` — all preserved. Test `#8` covers this for `.claude/settings.json`.
 - **Touch git history.** No `git add`, no `git commit`, no `git rm`. The user is expected to commit the post-uninstall state themselves. (Same convention as `update`.)
 - **Touch `~/.codex/config.toml` or any other user-level config.** Codex's hook activation flag (`features.hooks = true`) lives in the user's home config; we never edit that. We do remove the project-local `.codex/config.toml`, which only contains `project_doc_fallback_filenames` + a comment block.
@@ -234,7 +226,7 @@ The corollary: when adding a new platform/template that emits a structured confi
 
 ### 1. "Per-platform uninstall" is not supported
 
-There is no `--platform claude-code` flag. Reason: the manifest does not partition by platform — it is a flat `Record<posixPath, sha256>`. Inferring "this entry belongs to Claude Code" would mean prefix-matching `.claude/`, which is fragile (`.agents/skills/` is shared by Codex and Pi; `.github/copilot/` lives outside the platform-name pattern).
+There is no `--platform claude-code` flag. Reason: the manifest does not partition by platform — it is a flat `Record<posixPath, sha256>`. Inferring "this entry belongs to Claude Code" would mean prefix-matching `.claude/`, which is fragile — `.agents/skills/` is a shared root that no single platform owns.
 
 If a user wants to remove just one platform's files, the path is `trellis update` after editing `config.yaml`'s platform list — that flow knows how to deconfigure platforms cleanly. `uninstall` is a single-shot full removal.
 
@@ -248,7 +240,7 @@ If a user wants to remove just one platform's files, the path is `trellis update
 
 ### 3. Forgetting that `cleanupEmptyDirs` won't touch root dirs
 
-**Symptom**: After uninstall, `.cursor/` is empty but still present.
+**Symptom**: After uninstall, `.codex/` is empty but still present.
 
 **Cause**: `cleanupEmptyDirs` (shared with `update.ts`) refuses to remove anything in `ALL_MANAGED_DIRS` because during `update` those dirs must persist. Phase 5 of `executePlan` is the uninstall-specific fixup that goes back and prunes them.
 
@@ -290,13 +282,13 @@ Reference cases (number = test ID in the file):
 |---|---|---|
 | 1 | `.trellis/` missing | Friendly no-op exit, no error. |
 | 2 | `.trellis/` present, manifest missing | Error exit (manual cleanup hint). |
-| 3 | `init claude+cursor → uninstall` | Project is byte-clean afterwards. |
+| 3 | `init claude+codex → uninstall` | Project is byte-clean afterwards. |
 | 4 | `--dry-run` | No filesystem mutation. |
 | 5 | Prompt `n` | Aborts with no mutation. |
 | 6 | User-modified manifest file is still removed | Manifest membership trumps modification state. |
 | 7 | User-added file in managed dir survives | Manifest is the scope boundary. |
 | 8 | `.claude/settings.json` with extra user fields | Scrubber preserves user fields, strips trellis hooks. |
-| 8a | Empty managed dirs pruned (Kilo case, no structured config) | Phase 4+5 cleanup. |
+| 8a | Empty managed dirs pruned (platform with no structured config) | Phase 4+5 cleanup. |
 | 8b | Platform root survives when scrubbing leaves residual content | Phase 5 only prunes empty roots. |
 
 When adding a new structured-config platform:
@@ -328,4 +320,4 @@ Do **not** mock `fs` for these tests; they all use real tmpdirs. The pattern is:
 | `DIR_NAMES.WORKFLOW` | `constants/paths.ts:DIR_NAMES` |
 | `collectUncommittedTrellisData` | `commands/uninstall.ts:collectUncommittedTrellisData` (exported) |
 | `TRELLIS_ALLOW_DIRTY_UNINSTALL` (env bypass) | checked via `dirtyUninstallBypassEnabled` in `commands/uninstall.ts` |
-| Scrubbers (`scrubHooksJson`, `scrubOpencodePackageJson`, `scrubPiSettings`, `scrubCodexConfigToml`, `scrubManagedMarkdownBlock`) | `utils/uninstall-scrubbers.ts` — see `uninstall-scrubbers.md` |
+| Scrubbers (`scrubHooksJson`, `scrubCodexConfigToml`, `scrubManagedMarkdownBlock`) | `utils/uninstall-scrubbers.ts` — see `uninstall-scrubbers.md` |

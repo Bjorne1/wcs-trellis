@@ -174,7 +174,6 @@ Define interfaces for structured data:
 ```typescript
 // Good: Interface for options
 interface InitOptions {
-  cursor?: boolean;
   claude?: boolean;
   yes?: boolean;
   user?: string;
@@ -193,7 +192,7 @@ Use type aliases for unions and computed types:
 
 ```typescript
 // Good: Type alias for union
-export type AITool = "claude-code" | "cursor" | "opencode";
+export type AITool = "claude-code" | "codex";
 export type WriteMode = "ask" | "force" | "skip" | "append";
 export type ProjectType = "frontend" | "backend" | "fullstack" | "unknown";
 
@@ -284,7 +283,7 @@ Classify each hit:
 | Kind | Example | Action |
 |------|---------|--------|
 | **Schema / creator** | `task_store.cmd_create`, `@mindfoldhq/trellis-core/task:emptyTaskRecord` (re-exported by `utils/task-json.ts:emptyTaskJson` for legacy CLI call sites) | Drop field from output |
-| **Writer / updater** | `inject-subagent-context.py:update_current_phase`, OpenCode plugin equivalent | **Drop the write call OR delete the function entirely** |
+| **Writer / updater** | `inject-subagent-context.py:update_current_phase` | **Drop the write call OR delete the function entirely** |
 | **Reader / getter** | `tasks.py:load_task` (defaults via `data.get("field", default)` on `TaskInfo`) | Keep with tolerance default (`data.get("field", null)`) — handles legacy files |
 | **Docs / comments** | spec, README, PRDs | Update references |
 | **Tests** | Assertions on field presence | Flip to "must NOT contain field" |
@@ -403,13 +402,13 @@ When a CLI has both explicit flags (`--tool`) and convenience flags (`-y`), expl
 ```typescript
 // Bad: -y overrides explicit flags
 if (options.yes) {
-  tools = ["cursor", "claude"]; // Ignores --codex, --opencode!
-} else if (options.cursor || options.codex) {
+  tools = ["claude"]; // Ignores --codex!
+} else if (options.claude || options.codex) {
   // Build from flags...
 }
 
 // Good: Check explicit flags first
-const hasExplicitTools = options.cursor || options.codex || options.opencode;
+const hasExplicitTools = options.claude || options.codex;
 if (hasExplicitTools) {
   // Build from explicit flags (works with or without -y)
 } else if (options.yes) {
@@ -500,14 +499,14 @@ When handling multiple similar options, use arrays with metadata instead of repe
 
 ```typescript
 // Bad: Repetitive if-else
-if (options.cursor) tools.push("cursor");
+if (options.codex) tools.push("codex");
 if (options.claude) tools.push("claude");
 if (options.codex) tools.push("codex");
 // ... repeated logic, easy to miss one
 
 // Good: Data-driven approach
 const TOOLS = [
-  { key: "cursor", name: "Cursor", defaultChecked: true },
+  { key: "codex", name: "Codex", defaultChecked: true },
   { key: "claude", name: "Claude Code", defaultChecked: true },
   { key: "codex", name: "Codex", defaultChecked: false },
 ] as const;
@@ -887,7 +886,7 @@ The first commit (`346003d`) added a `tasksEmpty` fallback only in `init()`'s ma
 4. Source build needs Visual Studio 2017+ Build Tools, which most Windows users don't have installed.
 5. Install fails — **`trellis` itself can no longer be installed at all**.
 
-Time to detect: ~4 hours after publish. Fix: emergency revert in 0.6.0-beta.4 (removed `better-sqlite3`, marked the OpenCode 1.2+ SQLite reader as degraded with a soft-degrade fallback). The OpenCode SQLite section in `commands-mem.md` is now a stub describing the degraded state.
+Time to detect: ~4 hours after publish. Fix: emergency revert in 0.6.0-beta.4 (removed `better-sqlite3`, marked the OpenCode 1.2+ SQLite reader as degraded with a soft-degrade fallback). The reader was later removed with the platform itself.
 
 The lesson: **a native dep that fails to install fails the entire CLI**, not just one feature. For a productivity tool, that tradeoff is unacceptable unless the perf benefit is dramatic and unreplaceable.
 
@@ -920,7 +919,7 @@ if (nativeReader) {
 }
 ```
 
-Cross-reference: future native-dep additions should mirror the soft-degrade pattern used by `commands/mem.ts:opencodeListSessions` (on the `feat/v0.6.0-beta` branch). When the native reader is unavailable, the function returns degraded but non-empty output rather than throwing.
+Cross-reference: a future native-dep addition should keep the same soft-degrade shape — when the native reader is unavailable, return degraded but non-empty output rather than throwing.
 
 #### 3. Test on Windows + restricted network before shipping
 
@@ -981,7 +980,7 @@ If any answer is "no", the dep doesn't ship.
 4. Source build needs Visual Studio 2017+ Build Tools, which most Windows users don't have installed.
 5. Install fails — **`trellis` itself can no longer be installed at all**.
 
-Time to detect: ~4 hours after publish. Fix: emergency revert in 0.6.0-beta.4 (removed `better-sqlite3`, marked the OpenCode 1.2+ SQLite reader as degraded with a soft-degrade fallback). The OpenCode SQLite section in `commands-mem.md` is now a stub describing the degraded state.
+Time to detect: ~4 hours after publish. Fix: emergency revert in 0.6.0-beta.4 (removed `better-sqlite3`, marked the OpenCode 1.2+ SQLite reader as degraded with a soft-degrade fallback). The reader was later removed with the platform itself.
 
 The lesson: **a native dep that fails to install fails the entire CLI**, not just one feature. For a productivity tool, that tradeoff is unacceptable unless the perf benefit is dramatic and unreplaceable.
 
@@ -1014,7 +1013,7 @@ if (nativeReader) {
 }
 ```
 
-Cross-reference: future native-dep additions should mirror the soft-degrade pattern used by `commands/mem.ts:opencodeListSessions` (on the `feat/v0.6.0-beta` branch). When the native reader is unavailable, the function returns degraded but non-empty output rather than throwing.
+Cross-reference: a future native-dep addition should keep the same soft-degrade shape — when the native reader is unavailable, return degraded but non-empty output rather than throwing.
 
 #### 3. Test on Windows + restricted network before shipping
 

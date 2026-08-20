@@ -39,13 +39,13 @@ delete process.env.TRELLIS_CONTEXT_ID;
 
 `TrellisContext.getContextKey` treats it as the highest-priority override —
 production behavior, by design. When the suite runs inside a Claude Code or
-OpenCode session it leaks in from the parent shell and hijacks the resolver,
+host session it leaks in from the parent shell and hijacks the resolver,
 ignoring the test's mocked `platformInput`. Symptom: a test expecting
-`opencode_oc-a` receives `claude_<host-session-id>`, failing deterministically
+`codex_thread-a` receives `claude_<host-session-id>`, failing deterministically
 only on dev machines.
 
-`OPENCODE_RUN_ID` used to sit in this group. The JS branch that read it was
-removed on 2026-08-06 (no OpenCode version sets the name), so it is no longer a
+A purged name used to sit in this group. The branch that read it was
+removed on 2026-08-06 (no version of that host ever set it), so it is no longer a
 resolver override and the scrub went with it.
 
 **Group 2 — vars a hook *writes to*.**
@@ -64,13 +64,8 @@ which is why no test failure ever surfaced it.
 
 ```ts
 delete process.env.CLAUDE_PROJECT_DIR;
-delete process.env.QODER_PROJECT_DIR;
-delete process.env.CODEBUDDY_PROJECT_DIR;
+delete process.env.CODEX_PROJECT_DIR;
 delete process.env.FACTORY_PROJECT_DIR;
-delete process.env.CURSOR_PROJECT_DIR;
-delete process.env.GEMINI_PROJECT_DIR;
-delete process.env.KIRO_PROJECT_DIR;
-delete process.env.COPILOT_PROJECT_DIR;
 ```
 
 `session-start.py` prefers `*_PROJECT_DIR` over the JSON payload's `cwd` and
@@ -100,7 +95,7 @@ should set the env explicitly inside the test (`process.env.X = "..."` in a
 | Change Type | Test Type | Example |
 |-------------|-----------|---------|
 | New pure/utility function | Unit test | Added `compareVersions()` → test boundary values |
-| New platform | Unit (auto-covered by `registry-invariants.test.ts`) | Added opencode → invariants verify consistency |
+| New platform | Unit (auto-covered by `registry-invariants.test.ts`) | Adding a platform → invariants verify consistency |
 | Bug fix | Regression test | Fixed Windows encoding → add to `regression.test.ts` |
 | Changed init/update behavior | Integration test | Changed downgrade logic → add/update scenario in `update.integration.test.ts` |
 

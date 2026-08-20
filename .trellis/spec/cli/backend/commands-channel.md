@@ -902,7 +902,6 @@ Legacy event logs may still contain `linkedContext`; readers normalize it to
 **Cleanup contract** (`cleanup(channel, worker)` in supervisor.ts):
 - ALWAYS removes: `pid`, `worker-pid`, `config`, `spawnlock`,
   `shutdown-reason`, `reservation`
-- NEVER removes: `log`, `session-id`, `thread-id`, `inbox-cursor`, `events.jsonl`, `.seq`
 
 `channel rm` deletes the entire channel directory; the cleanup contract above
 only applies to per-worker supervisor cleanup.
@@ -1108,7 +1107,6 @@ trellis channel send trellis-issue --scope global --as main --thread forum-mode 
 | `TRELLIS_CHANNEL_ROOT` override | integration | create a channel with env override; assert events land under that root, not `~/.trellis/channels` |
 | Global/project scope collision | integration | create same name in `_global` and current project; unscoped write throws before appending, explicit `--scope global` succeeds |
 | Thread reducer | unit/integration | create `type=forum`; post `opened` + `comment` + `status`; assert reduced state has title/status/labels/assignees/comment count |
-| Thread reducer cursor | unit/integration | reduced state records `lastSeq` from the last thread event applied |
 | Thread pretty output | integration | default thread list prints the thread-view hint; create/thread event views print description and context summaries |
 | `matchesEventFilter` | unit | kind/from/thread/action/progress/to semantics match both `messages` and `watchEvents` consumers |
 | `parseCsv` helper | unit | comma-separated options share trimming and empty-entry behavior |

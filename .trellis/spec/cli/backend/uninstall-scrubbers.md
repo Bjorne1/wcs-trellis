@@ -22,11 +22,8 @@ Most files Trellis writes are opaque (`.py`, `.md`, `.ts`) — `trellis uninstal
 | File | What's shared |
 |------|----------------|
 | `.claude/settings.json` | Trellis writes the `hooks` block; user may have set `env`, `model`, `permissions`, `version` |
-| `.cursor/hooks.json` | Same idea, but a flat schema |
-| `.opencode/package.json` | Trellis adds `dependencies["@opencode-ai/plugin"]`; user may have other deps |
-| `.pi/settings.json` | Trellis adds `enableSkillCommands` plus entries in `extensions`/`skills`/`prompts` arrays; user may have entries of their own |
 | `.codex/config.toml` | Trellis writes a documented `project_doc_fallback_filenames` line + a comment block; user may have added more TOML directives |
-| `.codex/hooks.json`, `.gemini/settings.json`, `.factory/settings.json`, `.codebuddy/settings.json`, `.qoder/settings.json`, `.github/copilot/hooks.json` | Same hooks-block pattern as `.claude/settings.json` (sometimes flat, sometimes nested) |
+| `.codex/hooks.json` | Same nested hooks-block pattern as `.claude/settings.json` |
 
 If `uninstall` simply `rm`-ed these files, the user would lose their own config. If it **left** them alone, the dangling Trellis hook entries would point at deleted scripts and the platform would error on the next session.
 
@@ -60,7 +57,7 @@ Two distinct signatures depending on whether the scrubber needs to know the unin
 | Signature | Used by |
 |-----------|---------|
 | `(content: string, deletedPaths: readonly string[], mode: "nested" \| "flat") → ScrubResult` | `utils/uninstall-scrubbers.ts:scrubHooksJson` |
-| `(content: string) → ScrubResult` | `utils/uninstall-scrubbers.ts:scrubOpencodePackageJson`, `:scrubPiSettings`, `:scrubCodexConfigToml` |
+| `(content: string) → ScrubResult` | `utils/uninstall-scrubbers.ts:scrubCodexConfigToml` |
 
 Hooks-JSON scrubbers need the delete-set because they identify Trellis hook entries by **whether the entry's command refers to a path being deleted**. The other three identify Trellis content by exact-match values that Trellis-the-configurator hard-codes.
 
@@ -85,8 +82,7 @@ Scrubs `hooks`-shaped settings JSON for **eight** platforms. The schema differs 
 
 | Mode | Files | Schema |
 |------|-------|--------|
-| `"nested"` | `.claude/settings.json`, `.gemini/settings.json`, `.factory/settings.json`, `.codebuddy/settings.json`, `.qoder/settings.json`, `.codex/hooks.json` | `hooks.{Event}.[ {matcher?, hooks: [ {command, ...} ]} ]` |
-| `"flat"` | `.cursor/hooks.json`, `.github/copilot/hooks.json` | `hooks.{Event}.[ {command, ...} ]` |
+| nested (the only schema) | `.claude/settings.json`, `.codex/hooks.json` | `hooks.{Event}.[ {matcher?, hooks: [ {command, ...} ]} ]` |
 
 Algorithm:
 
@@ -120,31 +116,7 @@ This rule assumes the Trellis-emitted shape:
 
 #### Command field fallback
 
-`utils/uninstall-scrubbers.ts:getEntryCommand` reads `command` first, then falls back to `bash`, then `powershell`. Copilot's flat schema uses dual `bash`/`powershell` fields instead of a unified `command`. Either field is enough to identify a Trellis entry; we don't require both to match because Trellis emits the same script path on both fields.
-
-### `utils/uninstall-scrubbers.ts:scrubOpencodePackageJson`
-
-Scrubs `.opencode/package.json`:
-
-1. Delete `dependencies["@opencode-ai/plugin"]`.
-2. If `dependencies` ends up empty → drop the field.
-3. `fullyEmpty` iff the resulting root object has no keys.
-
-This is the simplest scrubber: only one field to touch, and the rest of `package.json` (name, version, scripts, devDeps, …) is user-owned.
-
-### `utils/uninstall-scrubbers.ts:scrubPiSettings`
-
-Scrubs `.pi/settings.json`:
-
-1. Drop `enableSkillCommands` (Trellis-only flag).
-2. Filter three arrays for the Trellis-emitted entries (exact string match):
-   - `extensions` — remove `"./extensions/trellis/index.ts"`
-   - `skills` — remove `"./skills"`
-   - `prompts` — remove `"./prompts"`
-3. If any of those arrays becomes empty → drop the array key.
-4. `fullyEmpty` iff the root has no keys.
-
-Constants `PI_TRELLIS_EXTENSION`, `PI_TRELLIS_SKILLS`, `PI_TRELLIS_PROMPTS` in `utils/uninstall-scrubbers.ts` define the exact strings the Pi configurator emits. If the configurator changes the path emitted, this scrubber must change in lockstep — there is no shared source of truth across the two halves.
+`utils/uninstall-scrubbers.ts:getEntryCommand` reads the entry's `command` field. A host that spells the command differently (for example separate `bash` / `powershell` fields) needs that spelling added here before its entries can be identified.
 
 ### `utils/uninstall-scrubbers.ts:scrubCodexConfigToml`
 
@@ -176,7 +148,7 @@ Scrubbers identify Trellis content via three distinct mechanisms — there is no
 | Mechanism | Used by | Example |
 |-----------|---------|---------|
 | **Last-token path match** against `deletedPaths` | `scrubHooksJson` | Hook entry with `command = "python3 .claude/hooks/session-start.py"` matches because the trailing token is in the delete-set |
-| **Exact string match** against hard-coded constants | `scrubOpencodePackageJson`, `scrubPiSettings` | `"./skills"` in a Pi `skills` array, `"@opencode-ai/plugin"` as a dep key |
+| **Exact string match** against hard-coded constants | `scrubCodexConfigToml` | the `project_doc_fallback_filenames` line Trellis writes |
 | **Hard-coded comment-line allowlist** + assignment regex | `scrubCodexConfigToml` | Lines whose stripped text matches any of `trellisCommentMarkers` |
 
 ### Why no "BEGIN TRELLIS / END TRELLIS" comment markers?
@@ -298,7 +270,6 @@ Tests for scrubbers live alongside the implementation as pure-function tests —
 
 - `scrubHooksJson`:
   - User hook entry whose command body merely *mentions* a deleted path inside an `echo` or comment argument → preserved (last-token rule).
-  - Hook entry with `bash` field instead of `command` (Copilot flat schema) → still matched.
   - Multiple deleted paths in `deletedPaths` → all matching entries dropped in one pass.
   - Both modes (`"nested"`, `"flat"`) covered separately.
 - `scrubCodexConfigToml`:
@@ -306,7 +277,6 @@ Tests for scrubbers live alongside the implementation as pure-function tests —
   - User edited a Trellis comment line (typo) → that single line preserved as user content; rest of Trellis block removed.
 - `scrubPiSettings`:
   - User has their own entry in `extensions`/`skills`/`prompts` → kept; only Trellis entries removed.
-- `scrubOpencodePackageJson`:
   - User has other dev/runtime deps → kept.
 
 ### Cross-cutting integration test
@@ -331,7 +301,5 @@ Related specs:
 ## Potential TODOs surfaced while reading
 
 - `commandMatchesDeletedPath` assumes the Trellis-emitted command has the exact shape `<python-cmd> <script-path>`. If we ever add launcher flags or wrappers, the helper needs a richer parser (full token scan, possibly drop known shell prefixes like `env VAR=val`).
-- The Pi exact-string constants (`PI_TRELLIS_EXTENSION`, `PI_TRELLIS_SKILLS`, `PI_TRELLIS_PROMPTS`) duplicate values that live in the Pi configurator. A shared module exporting these would prevent drift; today they are independently hard-coded in two places.
-- `scrubCodexConfigToml`'s comment-line allowlist (`trellisCommentMarkers`) is a hand-maintained list mirroring the configurator's emitted comment block. Same drift risk as Pi. Consider deriving the list from the same template file the configurator uses.
 - No legacy-marker compatibility layer exists yet. As soon as one configurator changes its emission, the scrubber will need a "match old OR new" branch and a deprecation window. Document the rule in this spec when the first migration lands.
 - All hooks-JSON scrubbers re-pretty-print with 2-space indent on every call, even when no change was made. This silently rewrites user formatting (e.g. tab-indented JSON). Acceptable today; flag if users complain.

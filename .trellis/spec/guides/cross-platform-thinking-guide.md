@@ -85,7 +85,7 @@ function warnIfPythonTooOld(): void {
 }
 ```
 
-**Rule 5**: Don't assume the Python version the AI CLI uses matches your shell's `python3`. The user's terminal may resolve `python3` → homebrew 3.11, but AI CLI hosts (including enterprise-forked Claude Code / Cursor distributions) spawn hook subprocesses with a minimal PATH that resolves `python3` → `/usr/bin/python3` → macOS system 3.9. Distributed templates must either target the lowest plausible version or use `from __future__ import annotations` for PEP 604 syntax. See `cli/backend/script-conventions.md` → **CRITICAL: PEP 604 Annotations Require `from __future__ import annotations`** for the hard rule and audit check.
+**Rule 5**: Don't assume the Python version the AI CLI uses matches your shell's `python3`. The user's terminal may resolve `python3` → homebrew 3.11, but AI CLI hosts (including enterprise-forked Claude Code distributions) spawn hook subprocesses with a minimal PATH that resolves `python3` → `/usr/bin/python3` → macOS system 3.9. Distributed templates must either target the lowest plausible version or use `from __future__ import annotations` for PEP 604 syntax. See `cli/backend/script-conventions.md` → **CRITICAL: PEP 604 Annotations Require `from __future__ import annotations`** for the hard rule and audit check.
 
 **Rule 6**: When calling Python from Python, use `sys.executable`:
 
@@ -139,7 +139,7 @@ A path string has two distinct roles. **Treat them differently.**
 function collectTemplates(): Map<string, string> {
   const files = new Map<string, string>();
   for (const entry of walk(dir)) {
-    files.set(path.join(".opencode", entry), readFile(entry));  // \ on Windows
+    files.set(path.join(".codex", entry), readFile(entry));  // \ on Windows
   }
   return files;
 }
@@ -150,7 +150,7 @@ import { toPosix } from "../utils/posix.js";
 function collectTemplates(): Map<string, string> {
   const files = new Map<string, string>();
   for (const entry of walk(dir)) {
-    files.set(toPosix(path.join(".opencode", entry)), readFile(entry));
+    files.set(toPosix(path.join(".codex", entry)), readFile(entry));
   }
   return files;
 }
@@ -390,7 +390,7 @@ Before committing cross-platform code:
 
 ### 7. External Tool API Contracts
 
-When integrating with external tools (Claude Code, Cursor, etc.), their API contracts are **implicit assumptions**.
+When integrating with external tools (Claude Code, Codex, etc.), their API contracts are **implicit assumptions**.
 
 **Rule**: Verify API formats from official documentation, don't guess.
 

@@ -43,7 +43,6 @@ Each breadcrumb body lives in a managed block of `.trellis/workflow.md`:
 - Both the opening and closing tags must end with the same STATUS string.
 
 The regex used by both the Python hook (`packages/cli/src/templates/shared-hooks/inject-workflow-state.py`)
-and the OpenCode plugin (`packages/cli/src/templates/opencode/plugins/inject-workflow-state.js`)
 is:
 
 ```
@@ -55,7 +54,7 @@ is:
 There are two regex consumers of the marker syntax:
 
 1. **Parser** — extracts tag content for breadcrumb emission. Lives in `inject-workflow-state.py` (`_TAG_RE`) and `inject-workflow-state.js`.
-2. **Stripper** — removes tag blocks from the workflow.md range injected at SessionStart (so AI doesn't read each block twice — once in the workflow overview, once in the per-turn breadcrumb). Lives in `session-start.py` (shared / codex / copilot copies), `workflow_phase.py`, and any future SessionStart-equivalent script.
+2. **Stripper** — removes tag blocks from the workflow.md range injected at SessionStart (so AI doesn't read each block twice — once in the workflow overview, once in the per-turn breadcrumb). Lives in `session-start.py` (shared and Codex copies), `workflow_phase.py`, and any future SessionStart-equivalent script.
 
 Both regexes MUST use the `\1` backreference variant — `[workflow-state:([A-Za-z0-9_-]+)]...[/workflow-state:\1]` — so they only match well-formed pairs (same STATUS on open and close). A non-backreference variant like `[workflow-state:[A-Za-z0-9_-]+]...[/workflow-state:[A-Za-z0-9_-]+]` permits `STATUS_A...STATUS_B` mismatches, which can swallow surrounding content if a user typo'd the closing tag.
 
@@ -108,12 +107,11 @@ Both regexes MUST use the `\1` backreference variant — `[workflow-state:([A-Za
 
    | Detected platform | `hookEventName` value |
    |---|---|
-   | gemini | `BeforeAgent` |
-   | all others (claude, cursor, codex, qoder, codebuddy, droid, copilot, kiro) | `UserPromptSubmit` |
+   | claude, codex | `UserPromptSubmit` |
 
    When adding a new hook-capable platform whose per-turn event name is not
    `UserPromptSubmit`, extend `_detect_platform()` and the `hook_event_name`
-   selector in `inject-workflow-state.py` (and the OpenCode `.js` plugin if
+   selector in `inject-workflow-state.py` (and any future port if
    the new platform shares its `chat.message`-style envelope). Do NOT
    hardcode `UserPromptSubmit` at any new emission site.
 
@@ -169,11 +167,10 @@ Consumers that resolve per-task:
 | `shared-hooks/session-start.py` (`_resolve_workflow_md`) | SessionStart Phase Index (`<trellis-workflow>` block) |
 | `shared-hooks/inject-workflow-state.py` (`load_breadcrumbs`) | per-turn `[workflow-state:*]` breadcrumb bodies |
 | `scripts/common/workflow_phase.py` (`get_context.py --mode phase`) | phase/step detail bodies |
-| `opencode/plugins/inject-workflow-state.js` (`resolveWorkflowMd`) | per-turn breadcrumbs (JS port; mirrors the Python rule for the same inputs) |
 | `pi/extensions/trellis/index.ts.txt` (`resolveWorkflowMd`) | per-turn breadcrumbs (TS port; mirrors the Python rule for the same inputs) |
-| `codex/hooks/session-start.py` + `copilot/hooks/session-start.py` (`_resolve_workflow_md`) | platform-specific SessionStart Phase Index TOC |
+| `codex/hooks/session-start.py` (`_resolve_workflow_md`) | platform-specific SessionStart Phase Index TOC |
 
-Known degradation: the OMP extension keeps injecting the global
+Known degradation: an extension-backed port would keep injecting the global
 `.trellis/workflow.md` regardless of per-task, personal, or team selection.
 Parity there is a tracked follow-up.
 
@@ -207,7 +204,7 @@ change required.
 
 The `[workflow-state:STATUS]` blocks are not the only runtime-sensitive
 content in `workflow.md`. Phase headings, step headings, and platform marker
-blocks such as `[codex-inline, Kilo, Antigravity, Devin]` are parsed by
+blocks such as `[codex-inline]` are parsed by
 `workflow_phase.py` / `get_context.py` when step-specific instructions are
 loaded.
 
@@ -218,7 +215,7 @@ are protected by the normal hash-based modified-file flow, not by preserving
 arbitrary prose outside tag blocks during automatic updates.
 
 Regression invariant: an older hash-tracked workflow containing stale Codex
-markers (`[Codex]` plus `[Kilo, Antigravity, Windsurf]`) must be replaced by
+markers (`[Codex]`) must be replaced by
 the current packaged template so `--platform codex` can resolve to
 `codex-inline` or `codex-sub-agent` and still load Phase 2.1 detail.
 
@@ -317,10 +314,9 @@ rely on categorical breadcrumb invisibility inside sub-agents.
 | `inject-subagent-context` (`implement.jsonl`/`check.jsonl` + task artifact injection) | ❌ | ✅ | ❌ | ❌ |
 | Pull-based prelude (`shared.ts:buildPullBasedPrelude`) | N/A | N/A | ✅ | fallback |
 
-Hook-inject platforms: claude, cursor, codebuddy, droid, kiro (`agentSpawn`), opencode (JS plugin).
-Pull-prelude platforms: codex, gemini, qoder, copilot.
+Hook-inject platforms: claude, codex (`SubagentStart`).
+Pull-prelude platforms: none currently registered (Codex keeps the prelude as a hooks-disabled fallback).
 Extension-backed platforms: pi.
-Hookless: kilo, antigravity, devin.
 
 **Implication**: sub-agent-required guidance must still be propagated through
 `inject-subagent-context` for hook-inject platforms, `buildPullBasedPrelude` for

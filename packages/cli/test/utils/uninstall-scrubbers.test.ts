@@ -10,8 +10,6 @@
 import { describe, it, expect } from "vitest";
 import {
   scrubHooksJson,
-  scrubOpencodePackageJson,
-  scrubPiSettings,
   scrubCodexConfigToml,
   scrubManagedMarkdownBlock,
 } from "../../src/utils/uninstall-scrubbers.js";
@@ -22,12 +20,6 @@ const CLAUDE_DELETE_PATHS = [
   ".claude/hooks/inject-workflow-state.py",
 ];
 
-const CURSOR_DELETE_PATHS = [
-  ".cursor/hooks/inject-subagent-context.py",
-  ".cursor/hooks/session-start.py",
-  ".cursor/hooks/inject-workflow-state.py",
-  ".cursor/hooks/inject-shell-session-context.py",
-];
 
 const TEST_BLOCK_START = "<!-- TRELLIS:TEST:START -->";
 const TEST_BLOCK_END = "<!-- TRELLIS:TEST:END -->";
@@ -205,135 +197,7 @@ describe("scrubHooksJson — nested schema", () => {
   });
 });
 
-describe("scrubHooksJson — flat schema", () => {
-  it("strips trellis hook entries from a Cursor-style file", () => {
-    const input = {
-      version: 1,
-      hooks: {
-        preToolUse: [
-          {
-            command: "python3 .cursor/hooks/inject-subagent-context.py",
-            matcher: "Task|Subagent",
-            timeout: 30,
-          },
-        ],
-        sessionStart: [
-          { command: "python3 .cursor/hooks/session-start.py", timeout: 10 },
-        ],
-      },
-    };
 
-    const { content, fullyEmpty } = scrubHooksJson(
-      JSON.stringify(input, null, 2),
-      CURSOR_DELETE_PATHS,
-      "flat",
-    );
-    const parsed = JSON.parse(content);
-    expect(parsed.hooks).toBeUndefined();
-    expect(parsed.version).toBe(1);
-    expect(fullyEmpty).toBe(false);
-  });
-
-  it("preserves user-added flat hook entries", () => {
-    const input = {
-      hooks: {
-        preToolUse: [
-          { command: "python3 .cursor/hooks/inject-subagent-context.py" },
-          { command: "python3 .cursor/hooks/my-rule.py" },
-        ],
-      },
-    };
-    const { content, fullyEmpty } = scrubHooksJson(
-      JSON.stringify(input, null, 2),
-      CURSOR_DELETE_PATHS,
-      "flat",
-    );
-    const parsed = JSON.parse(content);
-    expect(parsed.hooks.preToolUse).toHaveLength(1);
-    expect(parsed.hooks.preToolUse[0].command).toBe(
-      "python3 .cursor/hooks/my-rule.py",
-    );
-    expect(fullyEmpty).toBe(false);
-  });
-
-  it("matches Copilot bash/powershell command fields", () => {
-    const copilotPaths = [
-      ".github/copilot/hooks/session-start.py",
-      ".github/copilot/hooks/inject-workflow-state.py",
-    ];
-    const input = {
-      hooks: {
-        SessionStart: [
-          {
-            type: "command",
-            command: "python3 .github/copilot/hooks/session-start.py",
-            timeout: 10,
-          },
-        ],
-        userPromptSubmitted: [
-          {
-            type: "command",
-            bash: "python3 .github/copilot/hooks/inject-workflow-state.py",
-            powershell:
-              "python3 .github/copilot/hooks/inject-workflow-state.py",
-            timeoutSec: 5,
-          },
-        ],
-      },
-    };
-    const { content, fullyEmpty } = scrubHooksJson(
-      JSON.stringify(input, null, 2),
-      copilotPaths,
-      "flat",
-    );
-    expect(fullyEmpty).toBe(true);
-    expect(JSON.parse(content)).toEqual({});
-  });
-
-  it("reports fullyEmpty when only trellis hooks existed", () => {
-    const input = {
-      hooks: {
-        sessionStart: [
-          { command: "python3 .cursor/hooks/session-start.py", timeout: 10 },
-        ],
-      },
-    };
-    const { fullyEmpty } = scrubHooksJson(
-      JSON.stringify(input, null, 2),
-      CURSOR_DELETE_PATHS,
-      "flat",
-    );
-    expect(fullyEmpty).toBe(true);
-  });
-});
-
-describe("scrubOpencodePackageJson", () => {
-  it("removes @opencode-ai/plugin and reports fullyEmpty", () => {
-    const input = { dependencies: { "@opencode-ai/plugin": "1.1.40" } };
-    const { content, fullyEmpty } = scrubOpencodePackageJson(
-      JSON.stringify(input, null, 2),
-    );
-    expect(fullyEmpty).toBe(true);
-    expect(JSON.parse(content)).toEqual({});
-  });
-
-  it("preserves other deps and other top-level fields", () => {
-    const input = {
-      name: "my-project",
-      dependencies: {
-        "@opencode-ai/plugin": "1.1.40",
-        lodash: "^4.0.0",
-      },
-    };
-    const { content, fullyEmpty } = scrubOpencodePackageJson(
-      JSON.stringify(input, null, 2),
-    );
-    const parsed = JSON.parse(content);
-    expect(parsed.name).toBe("my-project");
-    expect(parsed.dependencies).toEqual({ lodash: "^4.0.0" });
-    expect(fullyEmpty).toBe(false);
-  });
-});
 
 describe("scrubManagedMarkdownBlock", () => {
   it("removes the managed block and preserves user markdown", () => {
@@ -392,69 +256,6 @@ Also keep this.
   });
 });
 
-describe("scrubPiSettings", () => {
-  it("strips trellis entries and reports fullyEmpty", () => {
-    const input = {
-      enableSkillCommands: true,
-      extensions: ["./extensions/trellis/index.ts"],
-      skills: ["./skills"],
-      prompts: ["./prompts"],
-      packages: [
-        {
-          source: "npm:pi-subagents",
-          extensions: [],
-          skills: [],
-          prompts: [],
-          themes: [],
-        },
-      ],
-    };
-    const { content, fullyEmpty } = scrubPiSettings(
-      JSON.stringify(input, null, 2),
-    );
-    expect(fullyEmpty).toBe(true);
-    expect(JSON.parse(content)).toEqual({});
-  });
-
-  it("preserves user-added array entries", () => {
-    const input = {
-      enableSkillCommands: true,
-      extensions: ["./extensions/trellis/index.ts", "./extensions/my-ext"],
-      skills: ["./skills", "./other-skills"],
-      prompts: ["./prompts"],
-      packages: [
-        {
-          source: "npm:pi-subagents",
-          extensions: [],
-          skills: [],
-          prompts: [],
-          themes: [],
-        },
-        {
-          source: "npm:user-package",
-          skills: ["./pkg-skills"],
-        },
-      ],
-      otherField: "user-value",
-    };
-    const { content, fullyEmpty } = scrubPiSettings(
-      JSON.stringify(input, null, 2),
-    );
-    const parsed = JSON.parse(content);
-    expect(parsed.enableSkillCommands).toBeUndefined();
-    expect(parsed.extensions).toEqual(["./extensions/my-ext"]);
-    expect(parsed.skills).toEqual(["./other-skills"]);
-    expect(parsed.prompts).toBeUndefined();
-    expect(parsed.packages).toEqual([
-      {
-        source: "npm:user-package",
-        skills: ["./pkg-skills"],
-      },
-    ]);
-    expect(parsed.otherField).toBe("user-value");
-    expect(fullyEmpty).toBe(false);
-  });
-});
 
 describe("scrubCodexConfigToml", () => {
   const TEMPLATE = `# Project-scoped Codex defaults for Trellis workflows.

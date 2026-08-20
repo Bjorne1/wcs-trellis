@@ -42,14 +42,13 @@ Core owns:
 - task record helpers that are useful outside the CLI
 - structured types shared by CLI, tests, and future SDK consumers
 - pure validation and normalization logic that should not depend on Commander or Chalk
-- the `mem` retrieval domain under `packages/core/src/mem/`: persisted-session readers (Claude Code / Codex / OpenCode), search and relevance scoring, dialogue-context extraction, brainstorm-phase slicing, and project aggregation
+- the `mem` retrieval domain under `packages/core/src/mem/`: persisted-session readers (Claude Code / Codex), search and relevance scoring, dialogue-context extraction, brainstorm-phase slicing, and project aggregation
 
 CLI owns:
 
 - command definitions and option parsing (including `tl mem` argv parsing)
 - help text and terminal output (including `tl mem` row formatting and `--json` shaping)
 - prompts, confirmations, exit codes, and `process.exit`
-- the OpenCode-unavailable stderr notice for `tl mem` (a presentation concern, not a core one)
 - template copying, dogfooding paths, migration manifest application, and update UX
 - release scripts and CI-specific package orchestration
 
@@ -139,7 +138,6 @@ Core owns:
 - `probeWorkerRuntime` / `reconcileWorkerLiveness` — host-local pid-file
   observation, kept separate from the durable projection;
   `reconcileWorkerLiveness` defaults to no durable writes
-- `readChannelEvents` cursor pagination (`beforeSeq` / `afterSeq` / `limit`);
   the read-all default is preserved when no option is set
 - `watchChannels` + `channelCursorKey` — cross-channel fan-in with
   per-channel cursors and dynamic channel discovery (project / global scope)
@@ -199,7 +197,7 @@ Core behavior should be tested in `packages/core` when the behavior can run with
 
 If a CLI test duplicates a pure core test, move the pure assertion to core and keep only the CLI-specific behavior in the CLI test.
 
-`mem` is the worked example of this rule: the pure retrieval/search/phase/adapter tests live in `packages/core/test/mem/**`, while `packages/cli/test/commands/mem-*.test.ts` keeps only CLI-wrapper coverage — argv parsing, `--json` output shape, exit behavior, and the OpenCode warning.
+`mem` is the worked example of this rule: the pure retrieval/search/phase/adapter tests live in `packages/core/test/mem/**`, while `packages/cli/test/commands/mem-*.test.ts` keeps only CLI-wrapper coverage — argv parsing, `--json` output shape, and exit behavior.
 
 ## Boundary: core task schema vs .trellis Python scripts
 

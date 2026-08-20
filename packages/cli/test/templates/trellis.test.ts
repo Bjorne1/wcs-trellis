@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  collectPlatformTemplates,
-  PLATFORM_IDS,
 } from "../../src/configurators/index.js";
-import type { AITool } from "../../src/types/ai-tools.js";
 import {
   scriptsInit,
   commonInit,
@@ -13,7 +10,6 @@ import {
   commonTaskQueue,
   commonTaskUtils,
   commonActiveTask,
-  commonCliAdapter,
   getDeveloperScript,
   initDeveloperScript,
   taskScript,
@@ -42,8 +38,7 @@ describe("trellis template constants", () => {
     commonTaskQueue,
     commonTaskUtils,
     commonActiveTask,
-    commonCliAdapter,
-    getDeveloperScript,
+      getDeveloperScript,
     initDeveloperScript,
     taskScript,
     getContextScript,
@@ -83,18 +78,6 @@ describe("trellis template constants", () => {
     return match[1];
   }
 
-  function platformBlock(section: string, openingMarker: string): string {
-    const normalizedSection = section.replace(/\r\n/g, "\n");
-    const escaped = openingMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const closingMarker = openingMarker.replace("[", "[/");
-    const escapedClosing = closingMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(`${escaped}\\n([\\s\\S]*?)\\n${escapedClosing}`);
-    const match = pattern.exec(normalizedSection);
-    if (!match) {
-      throw new Error(`workflow.md block ${openingMarker} must exist`);
-    }
-    return match[0];
-  }
 
   it("all templates are non-empty strings", () => {
     for (const [name, content] of Object.entries(allTemplates)) {
@@ -140,87 +123,6 @@ describe("trellis template constants", () => {
     expect(workflowMdTemplate).toContain("child-side pull fallback");
   });
 
-  it("[codex-native-subagents] Codex uses the native hook implement block, while class-2 platforms stay pull-based", () => {
-    const implement = stepSection("2.1");
-    const hookAutoBlock = platformBlock(
-      implement,
-      "[Claude Code, Cursor, OpenCode, codex-sub-agent, CodeBuddy, Droid, Pi, ZCode, Snow, Oh My Pi]",
-    );
-    const pullBasedMarker =
-      "[Gemini, Qoder, Copilot, Reasonix, Trae, Grok, Kimi Code, DeepSeek Harness]";
-    const pullBasedBlock = platformBlock(implement, pullBasedMarker);
-
-    const workflowLabelByPlatform: Partial<Record<AITool, string>> = {
-      gemini: "Gemini",
-      qoder: "Qoder",
-      copilot: "Copilot",
-      trae: "Trae",
-      grok: "Grok",
-      kimi: "Kimi Code",
-      dsh: "DeepSeek Harness",
-    };
-    // Pi templates keep a pull-based fallback, but workflow 2.1 routes Pi
-    // through the extension-backed context path.
-    const extensionBackedPreludeFallbackPlatforms = new Set<AITool>(["pi"]);
-    // Codex retains a child-side prelude as a compatibility fallback, but
-    // its primary workflow route is the native SubagentStart hook block.
-    const nativePushPreludeFallbackPlatforms = new Set<AITool>(["codex"]);
-    const generatedPullBasedLabels = PLATFORM_IDS.flatMap((id) => {
-      if (
-        extensionBackedPreludeFallbackPlatforms.has(id) ||
-        nativePushPreludeFallbackPlatforms.has(id)
-      ) {
-        return [];
-      }
-      const templates = collectPlatformTemplates(id);
-      const hasPullBasedPrelude =
-        templates !== undefined &&
-        [...templates.entries()].some(
-          ([filePath, content]) =>
-            /trellis-(implement|check)/.test(filePath) &&
-            content.includes("Required: Load Trellis Context First"),
-        );
-      if (!hasPullBasedPrelude) {
-        return [];
-      }
-      const label = workflowLabelByPlatform[id];
-      expect(
-        label,
-        `${id} generates pull-based agent definitions but has no workflow marker mapping`,
-      ).toBeDefined();
-      return [label as string];
-    });
-
-    const pullBasedLabels = [...generatedPullBasedLabels, "Reasonix"];
-    for (const label of pullBasedLabels) {
-      expect(pullBasedBlock, `${label} must use pull-based 2.1 guidance`).toContain(
-        label,
-      );
-      expect(
-        hookAutoBlock,
-        `${label} must not use hook/plugin auto-handles 2.1 guidance`,
-      ).not.toContain(label);
-    }
-    expect(pullBasedBlock).toContain(
-      "The pull-based sub-agent definition auto-handles the context load requirement",
-    );
-    expect(workflowMdTemplate).toContain("default continuable background mode");
-    expect(workflowMdTemplate).toContain("native settlement notice");
-    expect(workflowMdTemplate).toContain("optional companion plugin");
-    expect(workflowMdTemplate).toContain("once per dependent child id");
-    expect(workflowMdTemplate).toContain("Without `trellis_wait`");
-    expect(workflowMdTemplate).toContain("run_in_background: false");
-    expect(workflowMdTemplate).toContain(
-      "Never simulate waiting with shell sleep, polling loops",
-    );
-    expect(workflowMdTemplate).not.toContain("Start-Sleep");
-    expect(workflowMdTemplate).toContain("trellis-agent-<role>");
-    expect(workflowMdTemplate).toContain(
-      "on Claude Code: use the Task/Agent tool, never the Skill tool",
-    );
-    expect(hookAutoBlock).toContain("codex-sub-agent");
-    expect(hookAutoBlock).toContain("SubagentStart");
-  });
 
   it("[codex-native-subagents] template mode helpers default to auto and fail invalid values closed to inline", () => {
     const scripts = getAllScripts();

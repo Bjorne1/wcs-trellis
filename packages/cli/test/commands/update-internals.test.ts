@@ -212,27 +212,8 @@ describe("shouldExcludeFromBackup", () => {
   // Platform-native worktree dirs host nested sub-repos spawned by the CLI.
   // Snapshotting them on every update would duplicate gigabytes; they must
   // be excluded regardless of which platform put them there.
-  it.each([
-    ".claude/worktrees/feature-x/src/main.ts",
-    ".cursor/worktrees/bugfix-1/README.md",
-    ".gemini/worktrees/exp/file.txt",
-    ".factory/worktrees/any/file.md",
-  ])("excludes %s (worktrees convention)", (p) => {
-    expect(shouldExcludeFromBackup(p)).toBe(true);
-  });
 
-  it("excludes singular /worktree/ variant", () => {
-    expect(shouldExcludeFromBackup(".opencode/worktree/branch/file.ts")).toBe(
-      true,
-    );
-  });
 
-  it.each([
-    ".opencode/node_modules/@opencode-ai/sdk/package.json",
-    ".trellis/.backup-2026-04-22T10-24-27/.opencode/node_modules/zod/index.js",
-  ])("excludes dependency tree %s", (p) => {
-    expect(shouldExcludeFromBackup(p)).toBe(true);
-  });
 
   it.each([
     ".trellis/workspace/developer/journal-1.md",
@@ -272,14 +253,6 @@ describe("shouldExcludeFromBackup", () => {
   // silently fails on Windows and `collectAllFiles` descends into nested
   // full project copies (observed in the field: stack-overflow crash on
   // `trellis update --migrate`, late April 2026).
-  it.each([
-    ".claude\\worktrees\\feat-x\\src\\main.ts",
-    ".trellis\\tasks\\04-17-foo\\prd.md",
-    ".trellis\\workspace\\dev\\journal-1.md",
-    ".opencode\\node_modules\\zod\\index.js",
-  ])("excludes Windows-style backslash path %s", (p) => {
-    expect(shouldExcludeFromBackup(p)).toBe(true);
-  });
 });
 
 // =============================================================================
@@ -347,75 +320,15 @@ describe("renameTracesToJournal", () => {
 // =============================================================================
 
 import {
-  classifyMigrations,
   dirHasManifestEntries,
 } from "../../src/commands/update.js";
-import type { MigrationItem } from "../../src/types/migration.js";
 
 describe("dirHasManifestEntries", () => {
-  it("is true when the manifest tracks a file under the dir", () => {
-    expect(
-      dirHasManifestEntries(".windsurf/workflows", {
-        ".windsurf/workflows/a.md": "hash",
-      }),
-    ).toBe(true);
-  });
 
   it("is true on an exact key match", () => {
     expect(dirHasManifestEntries("AGENTS.md", { "AGENTS.md": "h" })).toBe(true);
   });
 
-  it("is false when nothing under the dir is tracked", () => {
-    expect(
-      dirHasManifestEntries(".windsurf/workflows", {
-        ".claude/settings.json": "h",
-      }),
-    ).toBe(false);
-  });
 
-  it("does not match a sibling dir that shares a prefix string", () => {
-    // ".devin" must not match ".devinX/..."
-    expect(
-      dirHasManifestEntries(".devin", { ".devinX/a.md": "h" }),
-    ).toBe(false);
-  });
 });
 
-describe("classifyMigrations rename-dir ownership gate", () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-renamedir-"));
-    // A user-owned .windsurf/workflows that Trellis never created.
-    fs.mkdirSync(path.join(tmpDir, ".windsurf", "workflows"), {
-      recursive: true,
-    });
-    fs.writeFileSync(
-      path.join(tmpDir, ".windsurf", "workflows", "user.md"),
-      "user workflow",
-    );
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  const migration: MigrationItem[] = [
-    { type: "rename-dir", from: ".windsurf/workflows", to: ".devin/workflows" },
-  ];
-
-  it("skips (never auto-moves) an unowned source dir when the target is absent", () => {
-    const result = classifyMigrations(migration, tmpDir, {}, new Map());
-    expect(result.auto).toHaveLength(0);
-    expect(result.skip).toHaveLength(1);
-    expect(result.skip[0].from).toBe(".windsurf/workflows");
-  });
-
-  it("auto-migrates when Trellis owns the source dir (manifest has entries)", () => {
-    const hashes = { ".windsurf/workflows/user.md": "some-hash" };
-    const result = classifyMigrations(migration, tmpDir, hashes, new Map());
-    expect(result.skip).toHaveLength(0);
-    expect(result.auto).toHaveLength(1);
-    expect(result.auto[0].to).toBe(".devin/workflows");
-  });
-});

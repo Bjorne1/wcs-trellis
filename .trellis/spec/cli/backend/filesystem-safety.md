@@ -139,7 +139,7 @@ without the guard**:
 ## Channel Context Trust Set (`channel.trusted_context_dirs`, #414)
 
 Worker context containment (context-loader `jailedRealpath`, agent-loader,
-OMP extension `resolveProjectFile`) accepts realpaths inside worker cwd **or**
+an extension's `resolveProjectFile`) accepts realpaths inside worker cwd **or**
 inside a trusted root. Trusted roots resolve once per spawn
 (`channel/context-trust.ts` `resolveTrustedRoots(cwd)`):
 
@@ -153,7 +153,7 @@ inside a trusted root. Trusted roots resolve once per spawn
 
 Containment predicate (identical at all three sites, byte-comparable):
 `real === root || real.startsWith(root + path.sep)` — the `path.sep` suffix is
-load-bearing (blocks `/work/ws-evil` matching trusted `/work/ws`). The OMP
+load-bearing (blocks `/work/ws-evil` matching trusted `/work/ws`). The
 template carries a standalone verbatim copy of the parser/resolver; changes
 must be mirrored there. Do not relax to lexical checks — realpath containment
 is the defense from the 2026-07-10 audit (#409 family).

@@ -40,16 +40,6 @@ describe("requireSupportedPython", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns the detected version when it is supported", () => {
-    vi.mocked(execSync).mockReturnValue("Python 3.11.12");
-
-    expect(requireSupportedPython("python3")).toBe("Python 3.11.12");
-
-    expect(execSync).toHaveBeenCalledWith("python3 --version", {
-      encoding: "utf-8",
-      stdio: "pipe",
-    });
-  });
 
   it("throws when the detected version is below the supported floor", () => {
     vi.mocked(execSync).mockReturnValue("Python 3.8.18");

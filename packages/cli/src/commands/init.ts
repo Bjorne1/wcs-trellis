@@ -664,7 +664,7 @@ they engage.
 
 ### 1. What Trellis is + the workflow
 
-Trellis is a workflow layer over Claude Code / Cursor / etc. that keeps AI
+Trellis is a workflow layer over Claude Code / Codex that keeps AI
 agents consistent with project-specific conventions instead of writing generic
 code every session.
 
@@ -1002,30 +1002,8 @@ async function maybePromptStatuslineOptIn(
 }
 
 interface InitOptions {
-  cursor?: boolean;
   claude?: boolean;
-  opencode?: boolean;
   codex?: boolean;
-  kilo?: boolean;
-  kiro?: boolean;
-  gemini?: boolean;
-  antigravity?: boolean;
-  devin?: boolean;
-  /** Deprecated alias for `devin` — Windsurf was renamed to Devin. */
-  windsurf?: boolean;
-  qoder?: boolean;
-  codebuddy?: boolean;
-  copilot?: boolean;
-  droid?: boolean;
-  dsh?: boolean;
-  pi?: boolean;
-  reasonix?: boolean;
-  zcode?: boolean;
-  trae?: boolean;
-  omp?: boolean;
-  grok?: boolean;
-  kimi?: boolean;
-  snow?: boolean;
   yes?: boolean;
   user?: string;
   force?: boolean;
@@ -1102,19 +1080,11 @@ interface InitAnswers {
 
 export async function init(options: InitOptions): Promise<void> {
   // Refuse to run in $HOME — running here would scoop platform runtime data
-  // (Claude/Codex/OpenCode session histories etc.) into the trellis hash
-  // manifest, and a subsequent `trellis uninstall` would wipe it.
+  // (Claude/Codex session histories etc.) into the trellis hash manifest, and
+  // a subsequent `trellis uninstall` would wipe it.
   if (isCwdHomedir() && !homedirBypassEnabled()) {
     console.error(chalk.red(homedirGuardMessage("init")));
     process.exit(1);
-  }
-
-  // Deprecated alias: --windsurf → --devin (Windsurf was renamed to Devin).
-  // Normalize here too so programmatic callers (not just the CLI action) map
-  // correctly. The CLI action prints the deprecation notice.
-  if (options.windsurf) {
-    options.devin = true;
-    delete options.windsurf;
   }
 
   const cwd = process.cwd();
@@ -1131,7 +1101,7 @@ export async function init(options: InitOptions): Promise<void> {
   console.log(chalk.cyan(`\n${banner.trimEnd()}`));
   console.log(
     chalk.gray(
-      "\n   All-in-one AI framework & toolkit for Claude Code & Cursor\n",
+      "\n   All-in-one AI framework & toolkit for Claude Code & Codex\n",
     ),
   );
 
@@ -1443,7 +1413,7 @@ export async function init(options: InitOptions): Promise<void> {
     // Explicit flags take precedence (works with or without -y)
     tools = explicitTools;
   } else if (options.yes) {
-    // No explicit tools + -y: default to Cursor and Claude
+    // No explicit tools + -y: default to every registry-default platform
     tools = TOOLS.filter((t) => t.defaultChecked).map((t) => t.key);
   } else {
     // Interactive mode

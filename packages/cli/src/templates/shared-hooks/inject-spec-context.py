@@ -364,7 +364,7 @@ def _shared_context_key(root: Path, payload: dict) -> str | None:
     for session identity: payload keys in all casings (``session_id`` /
     ``sessionId`` / ``sessionID``, conversation and transcript variants),
     nested payload shapes, the explicit ``TRELLIS_CONTEXT_ID`` override,
-    per-platform env fallbacks, and Cursor shell tickets — plus the platform
+    per-platform env fallbacks, and shell tickets — plus the platform
     fixes accumulated behind them. Payload identity is preferred over
     environment context so two live sessions can never collapse onto one
     exported env value (collision → missed injection is the unacceptable

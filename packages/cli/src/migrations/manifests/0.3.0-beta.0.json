@@ -93,91 +93,6 @@
     },
     {
       "type": "rename",
-      "from": ".cursor/commands/start.md",
-      "to": ".cursor/commands/trellis-start.md",
-      "description": "Rename Cursor start command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/finish-work.md",
-      "to": ".cursor/commands/trellis-finish-work.md",
-      "description": "Rename Cursor finish-work command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/before-frontend-dev.md",
-      "to": ".cursor/commands/trellis-before-frontend-dev.md",
-      "description": "Rename Cursor before-frontend-dev command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/before-backend-dev.md",
-      "to": ".cursor/commands/trellis-before-backend-dev.md",
-      "description": "Rename Cursor before-backend-dev command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/check-frontend.md",
-      "to": ".cursor/commands/trellis-check-frontend.md",
-      "description": "Rename Cursor check-frontend command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/check-backend.md",
-      "to": ".cursor/commands/trellis-check-backend.md",
-      "description": "Rename Cursor check-backend command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/check-cross-layer.md",
-      "to": ".cursor/commands/trellis-check-cross-layer.md",
-      "description": "Rename Cursor check-cross-layer command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/record-session.md",
-      "to": ".cursor/commands/trellis-record-session.md",
-      "description": "Rename Cursor record-session command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/update-spec.md",
-      "to": ".cursor/commands/trellis-update-spec.md",
-      "description": "Rename Cursor update-spec command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/onboard.md",
-      "to": ".cursor/commands/trellis-onboard.md",
-      "description": "Rename Cursor onboard command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/break-loop.md",
-      "to": ".cursor/commands/trellis-break-loop.md",
-      "description": "Rename Cursor break-loop command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/integrate-skill.md",
-      "to": ".cursor/commands/trellis-integrate-skill.md",
-      "description": "Rename Cursor integrate-skill command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/create-command.md",
-      "to": ".cursor/commands/trellis-create-command.md",
-      "description": "Rename Cursor create-command command with trellis- prefix"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/parallel.md",
-      "to": ".cursor/commands/trellis-parallel.md",
-      "description": "Rename Cursor parallel command with trellis- prefix"
-    },
-
-    {
-      "type": "rename",
       "from": ".trellis/scripts/get-developer.sh",
       "to": ".trellis/scripts-shell-archive/get-developer.sh",
       "description": "Archive legacy shell script (replaced by Python)"
@@ -212,7 +127,6 @@
       "to": ".trellis/scripts-shell-archive/create-bootstrap.sh",
       "description": "Archive legacy shell script (replaced by Python)"
     },
-
     {
       "type": "rename",
       "from": ".trellis/scripts/common/paths.sh",
@@ -261,7 +175,6 @@
       "to": ".trellis/scripts-shell-archive/common/registry.sh",
       "description": "Archive legacy shell script (replaced by Python)"
     },
-
     {
       "type": "rename",
       "from": ".trellis/scripts/multi-agent/start.sh",

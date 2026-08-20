@@ -10,20 +10,8 @@
     },
     {
       "type": "rename",
-      "from": ".cursor/commands/onboard-developer.md",
-      "to": ".cursor/commands/onboard.md",
-      "description": "Shortened onboard-developer to onboard"
-    },
-    {
-      "type": "rename",
       "from": ".claude/commands/record-agent-flow.md",
       "to": ".claude/commands/record-session.md",
-      "description": "Renamed record-agent-flow to record-session"
-    },
-    {
-      "type": "rename",
-      "from": ".cursor/commands/record-agent-flow.md",
-      "to": ".cursor/commands/record-session.md",
       "description": "Renamed record-agent-flow to record-session"
     }
   ]

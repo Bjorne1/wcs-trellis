@@ -51,9 +51,7 @@ function commandMatchesDeletedPath(
 }
 
 /**
- * Read the `command` (or fallback `bash` / `powershell`) string out of an
- * arbitrary hook entry. Copilot's flat schema uses `bash` + `powershell`
- * instead of `command` for some events.
+ * Read the `command` string out of an arbitrary hook entry.
  */
 function getEntryCommand(entry: unknown): string | null {
   if (entry === null || typeof entry !== "object") {
@@ -61,16 +59,14 @@ function getEntryCommand(entry: unknown): string | null {
   }
   const obj = entry as Record<string, unknown>;
   if (typeof obj.command === "string") return obj.command;
-  if (typeof obj.bash === "string") return obj.bash;
-  if (typeof obj.powershell === "string") return obj.powershell;
   return null;
 }
 
 /**
  * Scrub a hooks-shaped settings JSON file.
  *
- * `mode = "nested"` → `hooks.{Event}.[ {matcher?, hooks: [ {command,...} ]} ]`
- * `mode = "flat"`   → `hooks.{Event}.[ {command,...} ]`
+ * Schema: `hooks.{Event}.[ {matcher?, hooks: [ {command,...} ]} ]` — used by
+ * both `.claude/settings.json` and `.codex/hooks.json`.
  *
  * Strips every entry whose command references a path in `deletedPaths`,
  * then bottom-up cleans empty containers (matcher block, event array, hooks
@@ -80,7 +76,6 @@ function getEntryCommand(entry: unknown): string | null {
 export function scrubHooksJson(
   content: string,
   deletedPaths: readonly string[],
-  mode: "nested" | "flat",
 ): ScrubResult {
   let parsed: unknown;
   try {
@@ -118,42 +113,32 @@ export function scrubHooksJson(
     const filteredEvent: unknown[] = [];
 
     for (const entry of eventArr) {
-      if (mode === "flat") {
-        const cmd = getEntryCommand(entry);
-        if (cmd !== null && commandMatchesDeletedPath(cmd, deletedPaths)) {
-          continue; // drop trellis entry
-        }
+      // entry is { matcher?, hooks: [...] }
+      if (entry === null || typeof entry !== "object") {
         filteredEvent.push(entry);
-      } else {
-        // nested: entry is { matcher?, hooks: [...] }
-        if (entry === null || typeof entry !== "object") {
-          filteredEvent.push(entry);
-          continue;
-        }
-        const matcherBlock = entry as Record<string, unknown>;
-        const inner = matcherBlock.hooks;
-        if (!Array.isArray(inner)) {
-          filteredEvent.push(entry);
-          continue;
-        }
-
-        const filteredInner = inner.filter((sub) => {
-          const cmd = getEntryCommand(sub);
-          return !(
-            cmd !== null && commandMatchesDeletedPath(cmd, deletedPaths)
-          );
-        });
-
-        if (filteredInner.length === 0) {
-          // Whole matcher block is now empty → drop the block.
-          continue;
-        }
-
-        // Reconstruct the block with the filtered inner list.
-        const rebuilt: Record<string, unknown> = { ...matcherBlock };
-        rebuilt.hooks = filteredInner;
-        filteredEvent.push(rebuilt);
+        continue;
       }
+      const matcherBlock = entry as Record<string, unknown>;
+      const inner = matcherBlock.hooks;
+      if (!Array.isArray(inner)) {
+        filteredEvent.push(entry);
+        continue;
+      }
+
+      const filteredInner = inner.filter((sub) => {
+        const cmd = getEntryCommand(sub);
+        return !(cmd !== null && commandMatchesDeletedPath(cmd, deletedPaths));
+      });
+
+      if (filteredInner.length === 0) {
+        // Whole matcher block is now empty → drop the block.
+        continue;
+      }
+
+      // Reconstruct the block with the filtered inner list.
+      const rebuilt: Record<string, unknown> = { ...matcherBlock };
+      rebuilt.hooks = filteredInner;
+      filteredEvent.push(rebuilt);
     }
 
     if (filteredEvent.length === 0) {
@@ -170,129 +155,6 @@ export function scrubHooksJson(
     delete root.hooks;
   } else {
     root.hooks = hooksObj;
-  }
-
-  const fullyEmpty = Object.keys(root).length === 0;
-  return {
-    content: JSON.stringify(root, null, 2) + "\n",
-    fullyEmpty,
-  };
-}
-
-/**
- * Scrub `.opencode/package.json`:
- * - remove `dependencies["@opencode-ai/plugin"]`
- * - if `dependencies` ends up empty → drop the field
- * - fully empty when nothing is left in the object
- */
-export function scrubOpencodePackageJson(content: string): ScrubResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    return { content, fullyEmpty: false };
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { content, fullyEmpty: false };
-  }
-
-  const root = parsed as Record<string, unknown>;
-  const deps = root.dependencies;
-
-  if (deps !== null && typeof deps === "object" && !Array.isArray(deps)) {
-    const depsObj = deps as Record<string, unknown>;
-    if ("@opencode-ai/plugin" in depsObj) {
-      delete depsObj["@opencode-ai/plugin"];
-    }
-    if (Object.keys(depsObj).length === 0) {
-      delete root.dependencies;
-    } else {
-      root.dependencies = depsObj;
-    }
-  }
-
-  const fullyEmpty = Object.keys(root).length === 0;
-  return {
-    content: JSON.stringify(root, null, 2) + "\n",
-    fullyEmpty,
-  };
-}
-
-/**
- * Trellis-specific values written by the Pi configurator.
- *
- * The `extensions`/`skills`/`prompts` arrays are paths relative to `.pi/`. We
- * remove the exact entries that the Pi configurator emits.
- */
-const PI_TRELLIS_EXTENSION = "./extensions/trellis/index.ts";
-const PI_TRELLIS_SKILLS = "./skills";
-const PI_TRELLIS_PROMPTS = "./prompts";
-const PI_SUBAGENTS_PACKAGE = "npm:pi-subagents";
-
-function isTrellisPiEntry(value: unknown, target: string): boolean {
-  return typeof value === "string" && value === target;
-}
-
-/**
- * Scrub `.pi/settings.json`:
- * - drop `enableSkillCommands` (trellis-flagged)
- * - remove trellis entries from `extensions`/`skills`/`prompts` arrays
- * - remove trellis-managed `packages["npm:pi-subagents"]` isolation override
- * - drop arrays that become empty
- */
-export function scrubPiSettings(content: string): ScrubResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    return { content, fullyEmpty: false };
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { content, fullyEmpty: false };
-  }
-
-  const root = parsed as Record<string, unknown>;
-
-  if ("enableSkillCommands" in root) {
-    delete root.enableSkillCommands;
-  }
-
-  const arrayCleanups: [string, string][] = [
-    ["extensions", PI_TRELLIS_EXTENSION],
-    ["skills", PI_TRELLIS_SKILLS],
-    ["prompts", PI_TRELLIS_PROMPTS],
-  ];
-  for (const [key, target] of arrayCleanups) {
-    const arr = root[key];
-    if (!Array.isArray(arr)) continue;
-    const filtered = arr.filter((v) => !isTrellisPiEntry(v, target));
-    if (filtered.length === 0) {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-      delete root[key];
-    } else {
-      root[key] = filtered;
-    }
-  }
-
-  const packagesValue = root.packages;
-  if (Array.isArray(packagesValue)) {
-    const filtered = packagesValue.filter((entry) => {
-      if (
-        entry !== null &&
-        typeof entry === "object" &&
-        !Array.isArray(entry)
-      ) {
-        const obj = entry as Record<string, unknown>;
-        return obj.source !== PI_SUBAGENTS_PACKAGE;
-      }
-      // String entries — keep unless they exactly match the package name
-      return entry !== PI_SUBAGENTS_PACKAGE;
-    });
-    if (filtered.length === 0) {
-      delete root.packages;
-    } else {
-      root.packages = filtered;
-    }
   }
 
   const fullyEmpty = Object.keys(root).length === 0;

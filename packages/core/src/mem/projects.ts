@@ -21,7 +21,7 @@ export function listMemProjects(
 ): MemProjectSummary[] {
   const f = resolveFilter(options?.filter);
   const warnings: MemWarning[] = [];
-  const all = listAll({ ...f, cwd: undefined, limit: WIDE_LIMIT }, warnings);
+  const all = listAll({ ...f, cwd: undefined, limit: WIDE_LIMIT });
   for (const warning of warnings) options?.onWarning?.(warning);
 
   const byCwd = new Map<string, MemProjectSummary>();
@@ -37,10 +37,6 @@ export function listMemProjects(
         by_platform: {
           claude: 0,
           codex: 0,
-          grok: 0,
-          opencode: 0,
-          pi: 0,
-          zcode: 0,
         },
       };
       byCwd.set(s.cwd, agg);

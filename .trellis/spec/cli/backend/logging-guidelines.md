@@ -37,7 +37,7 @@ console.log(chalk.cyan("Generated structure files:"));
 
 ```typescript
 console.log(chalk.blue("📁 Creating workflow structure..."));
-console.log(chalk.blue("📝 Configuring Cursor commands..."));
+console.log(chalk.blue("📝 Configuring Codex commands..."));
 console.log(chalk.blue("🤖 Configuring Multi-Agent Pipeline..."));
 console.log(chalk.blue("📄 Created init-agent.md"));
 ```
@@ -118,7 +118,7 @@ console.log(chalk.gray(`Project type: ${typeDescription}\n`));
 
 // Step progress
 console.log(chalk.blue("📁 Creating workflow structure..."));
-console.log(chalk.blue("📝 Configuring Cursor commands..."));
+console.log(chalk.blue("📝 Configuring Codex commands..."));
 ```
 
 ### Completion Summary
@@ -221,7 +221,7 @@ console.log(chalk.gray(`\nConfiguring: ${tools.join(", ")}\n`));
 
 // 5. Progress steps
 console.log(chalk.blue("📁 Creating workflow structure..."));
-console.log(chalk.blue("📝 Configuring Cursor commands..."));
+console.log(chalk.blue("📝 Configuring Codex commands..."));
 console.log(chalk.blue("🤖 Configuring Multi-Agent Pipeline..."));
 console.log(chalk.gray("   - Creating agent configurations..."));
 

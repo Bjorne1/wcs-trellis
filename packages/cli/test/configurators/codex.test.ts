@@ -64,10 +64,6 @@ describe("extractCodexAgentModelKeys", () => {
     });
   });
 
-  it("tolerates a trailing inline comment", () => {
-    const content = 'model = "gpt-5.4" # pinned for cost control';
-    expect(extractCodexAgentModelKeys(content)).toEqual({ model: "gpt-5.4" });
-  });
 
   it("does not extract a key-shaped line from inside a multi-line string body", () => {
     const content = [

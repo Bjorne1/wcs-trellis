@@ -1,0 +1,9 @@
+{
+  "version": "0.7.0",
+  "description": "Stable package rename to the @blulotus/trellis namespace.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Internal:**\n- chore(release): renamed the published CLI and core packages from `@mindfoldhq/trellis` / `@mindfoldhq/trellis-core` to `@blulotus/trellis` / `@blulotus/trellis-core` and promoted the 0.7 beta line to stable.",
+  "migrations": [],
+  "notes": "Install the renamed @blulotus packages when upgrading from the previous namespace. No project-file migration is required."
+}

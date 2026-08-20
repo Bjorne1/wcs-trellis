@@ -20,7 +20,7 @@ paths:
 
 # Platform Integration Guide
 
-How to add support for a new AI CLI platform. The 21 currently registered are Claude Code, Cursor, OpenCode, Codex, Kilo, Kiro, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, Copilot, Factory Droid, Pi, Reasonix, ZCode, Trae, OMP, Grok, Kimi, and Snow — `PLATFORM_IDS` in `configurators/index.ts` is the list that counts.
+How to add support for a new AI CLI platform. The two currently registered are Claude Code and Codex — `PLATFORM_IDS` in `configurators/index.ts` is the list that counts.
 
 ---
 
@@ -32,7 +32,7 @@ Platform support uses a **centralized registry pattern** (similar to Turborepo's
 - **Function registry**: `src/configurators/index.ts` — `PLATFORM_FUNCTIONS`, one line per platform. It holds no per-platform logic; the doc-comment at `index.ts:1-11` is the authoritative add-a-platform list
 - **Shared configurator utilities**: `src/configurators/shared.ts` — renderers (`resolvePlaceholders()`, `resolvePlaceholdersNeutral()`), resolvers (`resolveCommands()`, `resolveSkills()`, `resolveAllAsSkills()`, `resolveBundledSkills()`), map builders (`collectSkillTemplates()`, `collectBothTemplates()`, `collectSharedHooks()`), and the render/write pair (`renderTemplateMap()`, `writeTemplateMap()`). See `configurator-shared.md`
 - **Shared template utilities**: `src/templates/template-utils.ts` — `createTemplateReader()` factory that eliminates boilerplate across platform template modules
-- **Shared hooks**: `src/templates/shared-hooks/` — platform-independent Python hook scripts (session-start, inject-workflow-state, inject-subagent-context, inject-shell-session-context) written as-is to platform hook directories according to `SHARED_HOOKS_BY_PLATFORM`. Claude Code `statusLine` is not installed by default.
+- **Shared hooks**: `src/templates/shared-hooks/` — platform-independent Python hook scripts (session-start, inject-workflow-state, inject-subagent-context, inject-spec-context) written as-is to platform hook directories according to `SHARED_HOOKS_BY_PLATFORM`. Claude Code `statusLine` is not installed by default.
 - **Common templates**: `src/templates/common/` — single source of truth for commands (start, finish-work), single-file workflow skills (before-dev, brainstorm, check, break-loop, update-spec), and multi-file bundled skills (trellis-channel, trellis-meta, trellis-session-insight, trellis-spec-bootstrap) with `{{placeholder}}` resolution per platform
 - **Shared utilities**: `src/utils/compare-versions.ts` — `compareVersions()` with full prerelease support (used by cli, update, migrations)
 - **Derived helpers**: `ALL_MANAGED_DIRS`, `getConfiguredPlatforms()`, etc. — consumed by update, init, hash tracking
@@ -74,12 +74,13 @@ When adding a new platform `{platform}`, update the following:
 
 Do **not** write a `configure{Platform}` — `fromTemplates` derives it, so the
 platform's file set is described exactly once and `trellis init` and `trellis
-update` cannot disagree about it. Copy `configurators/cursor.ts` (30 lines) or
-`configurators/antigravity.ts` (15 lines) as the shape.
+update` cannot disagree about it. Copy `configurators/codex.ts` as the shape —
+`collectBothTemplates()` in `shared.ts` covers a platform that has both a
+commands directory and a skills root in one call.
 
-Only three platforms spell both fields, each for a named residual: claude-code
-(the `--with-statusline` flag), codex (an intentionally empty `.codex/skills/`),
-zcode (a stderr notice). A residual is work that survives *after* the shared
+Both registered platforms spell both fields, each for a named residual:
+claude-code (the `--with-statusline` flag) and codex (an intentionally empty
+`.codex/skills/`). A residual is work that survives *after* the shared
 writer and cannot be a path→content pair; it never adds a file. If your
 platform seems to need one, read `configurator-shared.md` → "Template maps"
 first — the parity oracle in `test/configurators/platforms.test.ts` will fail
@@ -87,20 +88,7 @@ the build if it is really just an extra write.
 
 ### Step 4: Templates
 
-> **Key concept**: Most platforms now derive their content from `src/templates/common/` (commands + skills) via `resolvePlaceholders()` in `configurators/shared.ts`. Platform-specific template directories only contain **agents**, **settings/hooks config**, and platform-specific overrides. The `createTemplateReader()` factory from `src/templates/template-utils.ts` eliminates boilerplate in platform `index.ts` files.
-
-**Standard with shared hooks** (Qoder, CodeBuddy, Droid, Cursor, Gemini, Trae):
-
-| Directory                                                | Contents                                                                |
-| -------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `src/templates/{platform}/`                              | Root directory                                                          |
-| `src/templates/{platform}/index.ts`                      | Uses `createTemplateReader(import.meta.url)` — exports agents, settings |
-| `src/templates/{platform}/agents/`                       | Agent definitions (`.md` files — implement, check, research)            |
-| `src/templates/{platform}/settings.json` or `hooks.json` | Platform settings / hook config (may use `{{PYTHON_CMD}}` placeholder)  |
-
-> Note: These platforms add the platform-independent hook scripts to their template map with `collectSharedHooks(".{platform}/hooks", "{platform}")` from `shared.ts`. Commands and skills come from `src/templates/common/` via `resolveCommands()` / `resolveSkills()` / `resolveAllAsSkills()`, usually through `collectBothTemplates()`. The `createTemplateReader()` factory provides `listMdAgents()`, `getSettings()`, etc. without per-platform boilerplate.
->
-> Trae follows this shared-hook template pattern but writes `.trae/hooks.json`, `.trae/commands/trellis-*.md` with command frontmatter, `.trae/skills/`, `.trae/agents/`, and `.trae/hooks/`. Its main session uses `SessionStart` / `UserPromptSubmit` hooks; sub-agent context remains class-2 pull-based because Trae does not expose a Trellis-supported sub-agent prompt mutation surface.
+> **Key concept**: Platforms derive their content from `src/templates/common/` (commands + skills) via `resolvePlaceholders()` in `configurators/shared.ts`. Platform-specific template directories only contain **agents**, **settings/hooks config**, and platform-specific overrides. The `createTemplateReader()` factory from `src/templates/template-utils.ts` eliminates boilerplate in platform `index.ts` files.
 
 **Claude Code pattern** (full hooks + agents + settings):
 
@@ -112,55 +100,27 @@ the build if it is really just an extra write.
 | `src/templates/claude/hooks/`        | Claude-specific hook scripts (`.py` files)                   |
 | `src/templates/claude/settings.json` | Claude settings (uses `{{PYTHON_CMD}}` placeholder)          |
 
-> Note: Claude Code is the reference platform. It has its own hooks directory (not shared-hooks) because Claude hooks have platform-specific integration points. Commands come from `src/templates/common/commands/`.
+> Note: Claude Code is the reference platform. It has its own hooks directory (in addition to `shared-hooks/`) because a few Claude hooks have platform-specific integration points. Commands come from `src/templates/common/commands/`.
 
-**JS plugin pattern** (OpenCode):
+**Skills pattern** (Codex):
 
-| Directory                                    | Contents                     |
-| -------------------------------------------- | ---------------------------- |
-| `src/templates/{platform}/`                  | Root directory               |
-| `src/templates/{platform}/commands/trellis/` | Slash commands (`.md` files) |
-| `src/templates/{platform}/plugin/`           | JS plugin files              |
-| `src/templates/{platform}/lib/`              | JS library files             |
-| `src/templates/{platform}/package.json`      | Plugin dependencies          |
+| Directory                         | Contents                                                                         |
+| --------------------------------- | -------------------------------------------------------------------------------- |
+| `src/templates/codex/`            | Root directory                                                                   |
+| `src/templates/codex/index.ts`    | Uses `createTemplateReader(import.meta.url)` — exports agents                    |
+| `src/templates/codex/agents/`     | Agent definitions (`.toml`)                                                      |
+| `src/templates/codex/hooks.json`  | Hook registration (SessionStart / UserPromptSubmit / SubagentStart / PreToolUse) |
+| `src/templates/codex/hooks/`      | Codex-specific hook scripts                                                      |
+| `src/templates/codex/config.toml` | Project-scoped Codex defaults                                                    |
 
-> Note: OpenCode uses JS plugins instead of Python hooks and has no `index.ts` template module — `collectOpenCodeTemplates()` (`opencode.ts:79-95`) walks the template directory instead, then adds commands and skills from `common/`. It is registered through `fromTemplates` like every other platform, so `trellis update` tracks OpenCode files normally. If a new platform uses JS plugins, follow this pattern — and note the walk's `EXCLUDE_PATTERNS` keeps `.js` (real plugin code) while dropping `.js.map` / `.d.ts` build artifacts.
-
-**TypeScript extension pattern** (Pi Agent):
-
-| Directory                                                  | Contents                                                                                  |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `src/templates/{platform}/`                                | Root directory                                                                            |
-| `src/templates/{platform}/index.ts`                        | Uses `createTemplateReader(import.meta.url)` — exports agents, settings, extension source |
-| `src/templates/{platform}/agents/`                         | Agent definitions (`.md` files — implement, check, research)                              |
-| `src/templates/{platform}/extensions/trellis/index.ts.txt` | Project-local extension source written to `.pi/extensions/trellis/index.ts`               |
-| `src/templates/{platform}/settings.json`                   | Platform settings that enable extension, skills, and prompts                              |
-
-> Note: Pi Agent uses project-local TypeScript extensions instead of Trellis Python hooks. Keep generated hooks under `.pi/extensions/`, write prompt templates under `.pi/prompts/trellis-*.md`, and do not copy `shared-hooks/*.py` into `.pi/`. Agent Skills write to the shared `.agents/skills/` root (same path Codex and Gemini CLI use) via `resolveSkillsNeutral()`, not a private `.pi/skills/` root — Pi discovers `.agents/skills/` natively, and keeping a separate `.pi/skills/` copy caused Pi to see every skill twice when Codex or Gemini was also installed (#447). `configDir` stays `.pi`; `supportsAgentSkills: true` adds `.agents/skills` to Pi's managed paths, same as Codex/Gemini. A rename-dir migration (`0.6.8.json`) relocates any pre-#447 `.pi/skills/` install into `.agents/skills/` on `trellis update`. For the nested Pi launcher contract, see "Scenario: Pi Sub-Agent Launcher".
->
-> Pi is an explicit `trellis-start` exception: `session_start` is notify-only and cannot mutate model-visible context, so the configurator must keep `.pi/prompts/trellis-start.md` as a manual bootstrap fallback while the extension injects startup/full Trellis context through `before_agent_start.systemPrompt` and persists compact workflow/session context through a hidden custom message returned from `before_agent_start`.
->
-> Project-local package isolation rule: when Trellis enables Pi for a project, `.pi/settings.json` does not include `npm:pi-subagents` in `packages` — Trellis's own tool is named `trellis_subagent`, so no name collision with community `subagent` tool exists. Users may install community sub-agent packages (nicobailon/pi-subagents or tintinweb/pi-subagents) independently.
-
-**Skills pattern** (Codex, Kiro):
-
-| Directory                                | Contents                                                      |
-| ---------------------------------------- | ------------------------------------------------------------- |
-| `src/templates/{platform}/`              | Root directory                                                |
-| `src/templates/{platform}/index.ts`      | Uses `createTemplateReader(import.meta.url)` — exports agents |
-| `src/templates/{platform}/agents/`       | Agent definitions (platform-specific format)                  |
-| `src/templates/{platform}/settings.json` | Platform settings (optional)                                  |
-
-> Note: Kiro uses `resolveAllAsSkills()` from `shared.ts` to fold every template into a SKILL.md with YAML frontmatter; Codex does the same through `resolveAllAsSkillsNeutral()` because it writes into the shared `.agents/skills/` root. Either way the result goes through `collectSkillTemplates(skillRoot, skills, bundledSkills)` into the platform's template map.
->
-> **Qoder is a hybrid** — it has native Custom Commands (`.qoder/commands/{name}.md`) with required YAML frontmatter (`name` + `description`, flat layout per Qoder CLI docs), so session-boundary commands (`finish-work`, `continue`) go there via `resolveCommands()` + `wrapWithCommandFrontmatter()`, while the auto-triggered skills from `common/skills/` stay as `.qoder/skills/` via `resolveSkills()`. Use the `COMMAND_DESCRIPTIONS` registry in `shared.ts` (separate from `SKILL_DESCRIPTIONS`) for the short palette blurbs — command descriptions are one-line imperatives aimed at the user; skill descriptions are long prose aimed at the AI matcher.
+> Note: Codex folds every shared template into a `SKILL.md` with YAML frontmatter through `resolveAllAsSkillsNeutral()` (neutral because it writes into the shared `.agents/skills/` root), then `collectSkillTemplates(skillRoot, skills, bundledSkills)` folds the result into its template map. A platform that has both a commands directory and a skills root can use `collectBothTemplates(ctx, cmdPath, skillRoot)` in `shared.ts` instead, and adds its hook scripts with `collectSharedHooks(".{platform}/hooks", "{platform}")`.
 >
 > **Codex has a two-layer directory model:**
 >
-> | Layer                     | Install Path      | Template Source                           | Purpose                                                                           |
-> | ------------------------- | ----------------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
-> | Shared skills             | `.agents/skills/` | Generated from `common/` templates        | Cross-platform skills (agentskills.io standard)                                   |
-> | Codex config/agents/hooks | `.codex/`         | `src/templates/codex/{agents,hooks.json}` | Config, custom agents, UserPromptSubmit hook config, and compatibility hook files |
+> | Layer                     | Install Path      | Template Source                           | Purpose                                                          |
+> | ------------------------- | ----------------- | ----------------------------------------- | ---------------------------------------------------------------- |
+> | Shared skills             | `.agents/skills/` | Generated from `common/` templates        | Cross-platform skills (agentskills.io standard)                  |
+> | Codex config/agents/hooks | `.codex/`         | `src/templates/codex/{agents,hooks.json}` | Config, custom agents, hook config, and compatibility hook files |
 >
 > **Key rules:**
 >
@@ -169,28 +129,26 @@ the build if it is really just an extra write.
 > - Codex hooks require `features.hooks = true` in user config (Codex 0.129+; older versions accept legacy `codex_hooks = true`); 0.129+ also gates per-hook activation behind a one-time `/hooks` TUI review
 > - Platform detection uses `.codex/` only — `.agents/skills/` alone does NOT trigger codex detection
 > - `configDir` is `".codex"`, with `supportsAgentSkills: true` to auto-include `.agents/skills` in managed paths
->
-> **Kimi Code is a hybrid skills platform** — workflow/bundled skills go to the shared `.agents/skills/` root via `resolveSkillsNeutral()` (byte-identical to Codex/Gemini/Pi; Kimi discovers that root natively), while the session-boundary commands (`start` / `continue` / `finish-work`, invoked as `/skill:trellis-<name>`) and the Trellis agent prompts are written as Kimi-private skills under `.kimi-code/skills/<name>/SKILL.md`. Kimi has no project-level hooks/settings file (hooks are user-level `~/.kimi-code/config.toml` only) and no custom sub-agent definitions (built-in coder/explore/plan only), so no hooks, settings, extension, or `agents/` directory is written, and the agent prompts ship as skills with the pull-based prelude on implement/check (class-2).
 
 #### Rule: `.agents/skills/` writes use `resolvePlaceholdersNeutral()`
 
-`.agents/skills/` is a **shared destination**: multiple configurators (Codex, Gemini CLI 0.40+ via the workspace alias, future agentskills.io consumers) all write into the same path. Per-platform `{{CMD_REF:name}}` resolution (`$name` for Codex, `/trellis:name` for Gemini, etc.) makes the same `<skill>/SKILL.md` differ byte-for-byte depending on which configurator ran last → "last-writer-wins" content collisions and `.template-hashes.json` churn.
+`.agents/skills/` is a **shared destination**: Codex writes it today, and any future agentskills.io consumer would write the same path. Per-platform `{{CMD_REF:name}}` resolution (`$name` for Codex, `/trellis:name` for a slash-command platform) would make the same `<skill>/SKILL.md` differ byte-for-byte depending on which configurator ran last → "last-writer-wins" content collisions and `.template-hashes.json` churn.
 
 **Rule**: Anything written under `.agents/skills/` MUST be rendered via `resolvePlaceholdersNeutral()` (in `configurators/shared.ts`), which substitutes `` `name` (Trellis command) `` for `{{CMD_REF:name}}` instead of a platform prefix. All other placeholders (`{{CLI_FLAG}}`, `{{EXECUTOR_AI}}`, `{{USER_ACTION_LABEL}}`, conditionals, `{{PYTHON_CMD}}`) still resolve from the platform context — those don't appear in the auto-triggered skill templates from `common/skills/`, so the rendered output stays identical across writers.
 
-Per-platform skill directories (`.claude/skills/`, `.cursor/skills/`, `.qoder/skills/`, etc.) keep using `resolvePlaceholders()` — `{{CMD_REF}}` resolves to the platform-correct slash form there, because no other configurator writes those paths.
+Per-platform skill directories (`.claude/skills/`, etc.) keep using `resolvePlaceholders()` — `{{CMD_REF}}` resolves to the platform-correct slash form there, because no other configurator writes those paths.
 
-**Command-as-skill fallback files under `.agents/skills/`** (currently `trellis-start/SKILL.md`, `trellis-continue/SKILL.md`, and `trellis-finish-work/SKILL.md`, written via `resolveAllAsSkillsNeutral()` by Codex) may use per-platform `{{CLI_FLAG}}` / `{{PYTHON_CMD}}` because they are user-invoked fallback entrypoints. They still go through the neutral helper to keep `{{CMD_REF}}` neutralized for consistency with the surrounding shared skills. Platforms with their own private command and skill roots should not write `.agents/skills/`; for example, ZCode writes workflow/bundled skills under `.zcode/skills/` and keeps slash commands under `.zcode/commands/trellis/*.md`.
+**Command-as-skill fallback files under `.agents/skills/`** (currently `trellis-start/SKILL.md`, `trellis-continue/SKILL.md`, and `trellis-finish-work/SKILL.md`, written via `resolveAllAsSkillsNeutral()` by Codex) may use per-platform `{{CLI_FLAG}}` / `{{PYTHON_CMD}}` because they are user-invoked fallback entrypoints. They still go through the neutral helper to keep `{{CMD_REF}}` neutralized for consistency with the surrounding shared skills. A platform with its own private command and skill roots should not write `.agents/skills/` at all.
 
 **Wrong**:
 
 ```typescript
 // Codex configurator
 files.set(".agents/skills/check/SKILL.md", resolvePlaceholders(tmpl, codexCtx));
-// Gemini configurator (later)
+// A second writer of the same shared root (later)
 files.set(
   ".agents/skills/check/SKILL.md",
-  resolvePlaceholders(tmpl, geminiCtx),
+  resolvePlaceholders(tmpl, otherCtx),
 );
 // → byte-different SKILL.md from the same template; whoever runs last wins
 ```
@@ -205,66 +163,7 @@ files.set(
 // → byte-identical regardless of which configurator wrote it
 ```
 
-**Kiro JSON agent pattern** (Kiro):
-
-| Directory                     | Contents                                                                             |
-| ----------------------------- | ------------------------------------------------------------------------------------ |
-| `src/templates/kiro/`         | Root directory                                                                       |
-| `src/templates/kiro/index.ts` | Uses `createTemplateReader(import.meta.url)` — exports agents via `listJsonAgents()` |
-| `src/templates/kiro/agents/`  | Agent definitions (`.json` files)                                                    |
-
-> Note: Kiro is unique in using JSON format for agent definitions (not Markdown). The `createTemplateReader()` factory provides `listJsonAgents()` specifically for this. Skills are generated from `common/` templates via `resolveAllAsSkills()`.
-
-**Workflows pattern** (Kilo):
-
-| Directory               | Contents                                           |
-| ----------------------- | -------------------------------------------------- |
-| (no template directory) | Kilo generates from `common/` templates at runtime |
-
-> Note: Kilo uses `resolveCommands()` + `resolveSkills()` to generate workflows and skills. No physical template files needed.
-
-**Workflows pattern** (Antigravity):
-
-| Directory               | Contents                                         |
-| ----------------------- | ------------------------------------------------ |
-| (no template directory) | Antigravity derives from Codex skills at runtime |
-
-> Note: Antigravity has no physical template files. `collectAntigravityTemplates()` (`antigravity.ts:9-15`) is a single `collectBothTemplates()` call against `src/templates/common/` — commands become `.agent/workflows/{name}.md`, skills become `.agent/skills/trellis-{name}/SKILL.md`. **There is no coupling to Codex**; `.codex/skills/` holds only user content and deleting Trellis's Codex skill templates (2026-08-05) changed nothing here. The config dir is `.agent/workflows` with `.agent/skills` as an extra managed path. Workflows are triggered with `/workflow-name` slash commands.
-
-**Copilot pattern** (prompts + hooks):
-
-| Directory                          | Contents                            |
-| ---------------------------------- | ----------------------------------- |
-| `src/templates/copilot/`           | Root directory                      |
-| `src/templates/copilot/index.ts`   | Export functions for prompts, hooks |
-| `src/templates/copilot/prompts/`   | Prompt files (`.prompt.md`)         |
-| `src/templates/copilot/hooks/`     | Hook scripts (`.py` files)          |
-| `src/templates/copilot/hooks.json` | Hooks configuration                 |
-
-> Note: Copilot uses `.prompt.md` format for commands (not plain `.md`). Hooks use `hooks.json` (not `settings.json`).
->
-> SessionStart status: Microsoft's [VS Code Agent hooks docs](https://code.visualstudio.com/docs/copilot/customization/hooks) (preview, documented since VS Code 1.110 in Feb 2026) define `SessionStart.hookSpecificOutput.additionalContext` as the field that injects context into the agent's conversation. Trellis's `copilot/hooks/session-start.py` emits this spec-compliant shape. Whether Copilot consumes `additionalContext` depends on the user's installed VS Code and Copilot versions, which is outside Trellis's control — do not re-introduce a hardcoded `systemMessage` claiming Copilot ignores hook output (see GitHub #248). Copilot remains a class-2 (pull-based) platform for sub-agent context delivery until end-to-end consumption is verified.
-
-**Droid pattern** (droids + settings):
-
-| Directory                           | Contents                                                                |
-| ----------------------------------- | ----------------------------------------------------------------------- |
-| `src/templates/droid/`              | Root directory                                                          |
-| `src/templates/droid/index.ts`      | Uses `createTemplateReader(import.meta.url)` — exports droids, settings |
-| `src/templates/droid/droids/`       | Droid definitions (`.md` files — implement, check, research)            |
-| `src/templates/droid/settings.json` | Droid settings                                                          |
-
-> Note: Droid uses "droids" terminology instead of "agents" but follows the same pattern — `collectDroidTemplates()` sets `.factory/droids/{name}.md` entries directly from `getAllDroids()`.
-
-**Devin pattern** (no template directory):
-
-| Directory               | Contents                                                           |
-| ----------------------- | ------------------------------------------------------------------ |
-| (no template directory) | Devin generates entirely from `common/` templates |
-
-> Note: `collectDevinTemplates()` (`devin.ts:10-16`) is one `collectBothTemplates()` call — `resolveCommands()` for `.devin/workflows/trellis-{name}.md`, `resolveSkills()` for `.devin/skills/`. Devin gets **no shared hooks at all**: it is not a key in `SHARED_HOOKS_BY_PLATFORM` and has no hook surface. No platform-specific template files needed.
-
-**Required commands/skills**: All platforms must include the following (adapted to each platform's format). Content comes from `src/templates/common/`:
+**Required commands/skills**: Every platform must include the following (adapted to its own format). Content comes from `src/templates/common/`:
 
 | Type    | Name          | Purpose                                                    | Required |
 | ------- | ------------- | ---------------------------------------------------------- | -------- |
@@ -374,148 +273,59 @@ built-binary `trellis init` -> `.trellis/.template-hashes.json` -> built-binary
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `src/templates/trellis/scripts/common/cli_adapter.py` | Add to `Platform` literal type, `config_dir_name` property, `detect_platform()`, `get_cli_adapter()` validation |
 
-**cli_adapter.py methods requiring explicit branches** (do NOT rely on `else` fallthrough):
-
-| Method                       | What to decide                    | Example                                          |
-| ---------------------------- | --------------------------------- | ------------------------------------------------ |
-| `config_dir_name`            | Config directory name             | `".gemini"`, `".agent"`                          |
-| `get_trellis_command_path()` | Command file path format          | `.toml` vs `.md`, subdirectory vs flat           |
-| `get_non_interactive_env()`  | Non-interactive env var           | `{}` if none, or platform-specific               |
-| `build_run_command()`        | CLI command for running agents    | `["gemini", prompt]` or raise ValueError         |
-| `build_resume_command()`     | CLI command for resuming sessions | `["gemini", "--resume", id]` or raise ValueError |
-| `cli_name`                   | CLI executable name               | `"gemini"`, `"agy"`                              |
-| `detect_platform()`          | Directory detection logic         | Check `.gemini/` exists                          |
-| `get_commands_path()`        | Command directory structure       | `commands/trellis/` or `workflows/`              |
-
-> Note: Python scripts run in user projects at runtime — they cannot import from the TS registry and maintain their own registry in `cli_adapter.py`.
-
 ### Active Task Resolution
 
-Current-task state is session/window scoped. New hook, statusline, plugin,
-extension, and sub-agent consumers must call the shared resolver path:
+Current-task state is session/window scoped. New hook, statusline, and
+sub-agent consumers must call the shared resolver path:
 
-| Runtime                         | Resolver surface                                                                                      |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Python hooks/statusline/scripts | `.trellis/scripts/common/active_task.py`                                                              |
-| Existing Python callers         | `common.paths.get_current_task()` / `get_current_task_abs()` / `get_current_task_source()`            |
-| OpenCode plugin                 | JS resolver in `lib/trellis-context.js`, mirroring `active_task.py`                                   |
-| Pi extension                    | Extension-local resolver using `ctx.sessionManager.getSessionId()` and Bash `tool_call` env injection |
-| Optional DSH companion          | Managed `DSH_TRELLIS_CONTEXT_ID` from the current shell execution's native DSH session                |
+| Runtime                         | Resolver surface                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| Python hooks/statusline/scripts | `.trellis/scripts/common/active_task.py`                                                   |
+| Existing Python callers         | `common.paths.get_current_task()` / `get_current_task_abs()` / `get_current_task_source()` |
 
 Do not add direct `.trellis/.current-task` reads in hooks, statusline scripts,
-sub-agent context injection, or platform plugins. Direct reads reintroduce
-multi-window task pollution.
+or sub-agent context injection. Direct reads reintroduce multi-window task
+pollution.
 
-Context-key precedence, as implemented in `active_task.py:resolve_context_key`
-(`:478-540`):
+Context-key precedence, as implemented in `active_task.py:resolve_context_key`:
 
-1. Managed `DSH_TRELLIS_CONTEXT_ID`, when the optional `dsh-trellis` plugin
-   contributes it for the current DSH shell execution.
-2. The canonical DSH env-table identity when both `DSH_SHELL=1` and a non-empty
-   `DSH_SESSION_ID` prove the process is inside a DSH managed shell.
-3. `TRELLIS_CONTEXT_ID` environment override for subprocesses.
-4. From the hook payload: `session_id`, `sessionId`, or `sessionID`.
-5. From the hook payload: `conversation_id` / `conversationId` / `conversationID`.
-6. From the hook payload: `transcript_path` / `transcriptPath` / `transcript`
+1. `TRELLIS_CONTEXT_ID` environment override for subprocesses.
+2. From the hook payload: `session_id`, `sessionId`, or `sessionID`.
+3. From the hook payload: `conversation_id` / `conversationId` / `conversationID`.
+4. From the hook payload: `transcript_path` / `transcriptPath` / `transcript`
    when non-empty.
-7. A platform-native session environment variable — but only for the handful of
+5. A platform-native session environment variable — but only for the handful of
    names that have actually been verified to exist, and only for the platform
-   the resolver detected (`_iter_env_keys` filters by platform name, so ZCode's
-   entry cannot fire in a Claude session). Session names are tried first, then
-   conversation names, then transcript names (`active_task.py:294-322`).
-8. A short-lived shell ticket, checked **last** and **not** gated on platform
-   name (`active_task.py:537-540`) — see "Shell-ticket bridge" below. Last on
-   purpose: a platform that genuinely exports identity into the shell outranks
-   a ticket written on its behalf.
+   the resolver detected (`_iter_env_keys` filters by platform name, so one
+   platform's entry cannot fire in another's session).
+6. A short-lived shell ticket, checked **last** and **not** gated on platform
+   name — see "Shell-ticket bridge" below. Last on purpose: a platform that
+   genuinely exports identity into the shell outranks a ticket written on its
+   behalf.
 
-The env tables live at `active_task.py:59-134`. Do not add a name to them by
-analogy with a neighbour: a 2026-08-05 audit of all 21 platforms found 12 of
-the 21 declared names had never existed anywhere. The provenance convention
-that came out of it is in `script-conventions.md` → "Session env var names
-carry their provenance", and it is binding on this file too — no platform's
-session env var may be named here without the same grade of evidence.
+The env table lives near the top of `active_task.py`. Do not add a name to it by
+analogy with a neighbour: a 2026-08-05 audit found most pattern-guessed
+`<PLATFORM>_SESSION_ID` names had never existed anywhere. The provenance
+convention that came out of it is in `script-conventions.md` → "Session env var
+names carry their provenance", and it is binding on this file too — no
+platform's session env var may be named here without the same grade of evidence.
+The two verified names are `CLAUDE_CODE_SESSION_ID` (Claude Code) and
+`CODEX_THREAD_ID` (Codex).
 
-Cursor IDE may send `transcript_path: null`; this must not prevent session
-scoping when `session_id` or `conversation_id` is present.
-
-DeepSeek Harness is the verified shell-env exception. It exposes
-`DSH_SESSION_ID`, but an inner DSH process also inherits ordinary variables such
-as an outer Claude/Codex session's `TRELLIS_CONTEXT_ID`; the generic override
-would silently claim the inner task before the native table is consulted. DSH
-discards ambient `DSH_*` values before rebuilding its managed namespace, so the
-pair `DSH_SHELL=1` plus a non-empty `DSH_SESSION_ID` is trusted evidence for the
-current DSH shell and its native table identity may outrank the generic override
-without changing other platforms' semantics. The optional `dsh-trellis` plugin
-additionally registers a managed
-`DSH_TRELLIS_CONTEXT_ID = dsh_<session-id>` through DSH's `shellEnv` registry;
-that forwarded identity remains first because a child may differ from the
-shell's own session. Plugin-owned subprocess commands must also set
-`TRELLIS_CONTEXT_ID` explicitly to the same DSH context key. Regression coverage
-must pin the plugin-present and plugin-absent nested cases, assert that only the
-`dsh_*` runtime pointer is written, and prove that `DSH_SESSION_ID` without the
-`DSH_SHELL=1` sentinel does not displace an explicit generic override.
-
-OpenCode has **no** entry in any env table. Its plugin holds the session
-identity and injects it, so the plugin must prefix Bash tool commands in
-`tool.execute.before` with a shell-aware `TRELLIS_CONTEXT_ID` assignment when
-the command does not already set one: POSIX shells use
-`export TRELLIS_CONTEXT_ID=<context-key>;`, while Windows PowerShell uses
-`$env:TRELLIS_CONTEXT_ID = '<context-key>';`. That prefix is the only channel
-by which an AI-run `task.py` sees an OpenCode session. Do not infer the
-shell dialect from `process.platform` alone: on Windows, Git Bash / MSYS2 still
-parse POSIX syntax. OpenCode must treat `MSYSTEM`, `MINGW_PREFIX`,
-`OSTYPE=msys|mingw|cygwin`, `SHELL=...bash`, or `OPENCODE_GIT_BASH_PATH` as
-POSIX-shell signals and keep PowerShell as the Windows default only when no
-POSIX-shell signal is present.
-Regression tests must cover both families: `win32` with no POSIX-shell signal
-emits the PowerShell prefix, while `win32` with each supported POSIX-shell
-signal emits the `export` prefix. Existing explicit-assignment dedupe tests
-must continue to cover POSIX, `env ... TRELLIS_CONTEXT_ID=...`, and PowerShell
-forms.
-
-> **`OPENCODE_RUN_ID` is not an input on either side.** It was real on OpenCode
-> ~1.14.x — observed live in an `opencode run` bash child alongside
-> `OPENCODE_PID` / `OPENCODE_PROCESS_ROLE` — and upstream dropped it: the
-> 1.17.18 binary carries 82 other `OPENCODE_*` names but neither
-> `OPENCODE_RUN_ID` nor `PROCESS_ROLE`, and 1.18.13's source has zero hits.
-> Python purged it on 2026-08-05 (`PURGED_ENV_NAMES`); the JS resolver's branch
-> went on 2026-08-06. Both sides are now test-locked to ignore it
-> (`regression.test.ts` "task.py start ignores OPENCODE_RUN_ID" and "OpenCode
-> resolver ignores OPENCODE_RUN_ID and uses the plugin sessionID"). The one
-> place it ever fired was a stray host-shell export hijacking a resolver, which
-> is why `test/setup.ts` had to scrub it. Do not treat it as a precedent for
-> adding env names.
-
-Pi Agent exposes its real session identity through the extension context, not
-through ordinary Bash environment. The generated `.pi/extensions/trellis/index.ts`
-extension must read `ctx.sessionManager.getSessionId()`, derive the same
-`pi_<session-id>` context key for context injection and sub-agent launches, and
-prefix Bash tool calls in `tool_call` with
-`export TRELLIS_CONTEXT_ID=<context-key>;` when the command does not already set
-one.
-Copilot should use
-`session_id` / `sessionId` only if the actual payload provides it; otherwise it
-has no active task.
+A host may send `transcript_path: null`; this must not prevent session scoping
+when `session_id` or `conversation_id` is present.
 
 `task.py start <task>` has no hook stdin when it is run as a normal shell
 command. It can write session-local state only when a context key is available
 through `TRELLIS_CONTEXT_ID` or a platform-native environment variable exposed
-by the host. Hooks and plugins should pass `TRELLIS_CONTEXT_ID` to subprocesses
-they launch. Claude Code is special: SessionStart provides `CLAUDE_ENV_FILE`,
-so the shared hook must persist `export TRELLIS_CONTEXT_ID=<context-key>` there
-for later Bash tool calls in the same conversation. OpenCode is also special:
-there is no env-file bridge, so the JS plugin must prefix Bash tool commands
-with a shell-aware `TRELLIS_CONTEXT_ID` assignment using plugin session identity
-before execution; on Windows, this must be shell-dialect-aware rather than a
-plain `process.platform === "win32"` check. **No researched platform has a
-reliable command-env bridge** — that is the general finding, not a Cursor
-quirk — so every hook-capable platform with a pre-shell event gets the shell
-ticket instead (see below). Without one of these session signals, `task.py
-start` must fail with a clear session identity hint and must not write
+by the host. Hooks should pass `TRELLIS_CONTEXT_ID` to subprocesses they launch.
+Claude Code is special: SessionStart provides `CLAUDE_ENV_FILE`, so the shared
+hook must persist `export TRELLIS_CONTEXT_ID=<context-key>` there for later Bash
+tool calls in the same conversation. **No researched platform has a reliable
+command-env bridge**, so every hook-capable platform with a pre-shell event gets
+the shell ticket instead (see below). Without one of these session signals,
+`task.py start` must fail with a clear session identity hint and must not write
 `.trellis/.current-task`.
-Pi is extension-backed rather than Python-hook-backed: `tool_call` must mutate
-`event.input.command` before Bash execution, and the custom `trellis_subagent` tool must
-spawn child `pi` processes with `TRELLIS_CONTEXT_ID` in `env`.
 
 #### Shell-ticket bridge (platform-neutral)
 
@@ -524,17 +334,11 @@ child process, but every hook-capable one puts that id on hook stdin. So a hook
 registered on the host's pre-shell event writes a short-lived ticket, and
 `task.py` reads it back.
 
-`inject-shell-session-context.py` is that writer. It ships to **cursor, gemini,
-qoder, codebuddy, droid, trae, zcode** (`shared-hooks/index.ts:106-145`) — not
-Cursor alone — and is registered on whichever pre-shell event the host offers:
-Cursor's `beforeShellExecution`, Claude-shaped `PreToolUse`, or Gemini's
-`BeforeTool`. Kiro is deliberately absent; the reason is in the declaration
-comment.
-
-The current ticket directory is `.trellis/.runtime/shell-tickets/`.
-`cursor-shell/` is the pre-0.6.13 name from when the bridge was Cursor-only —
-still read so a command in flight across an upgrade does not degrade, **never**
-written.
+No currently registered platform ships a ticket **writer**: Claude Code exports
+`CLAUDE_CODE_SESSION_ID` (plus the `CLAUDE_ENV_FILE` bridge) and Codex exports
+`CODEX_THREAD_ID`, so both resolve identity without one. `active_task.py` still
+reads tickets from `.trellis/.runtime/shell-tickets/`, which is what a new
+platform with a pre-shell hook event would write to.
 
 The full contract — payload shape, the four acceptance conditions, and the
 install-directory rule that decides the ticket's context key — is in
@@ -553,9 +357,9 @@ while debugging. Statuslines may shorten this to `[session]` to avoid noisy UI.
 | ---------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `src/templates/trellis/scripts/common/task_store.py` | `_SUBAGENT_CONFIG_DIRS` (tuple) | Add `.{configDir}/` if the new platform can spawn sub-agents (Class-1 hook-inject, Class-2 pull-based, or extension-backed) |
 
-This tuple is consulted by `cmd_create` to decide whether to seed `implement.jsonl` / `check.jsonl` for the new task. Agent-less platforms (Kilo, Antigravity, Devin) MUST be excluded — they don't consume jsonl.
+This tuple is consulted by `cmd_create` to decide whether to seed `implement.jsonl` / `check.jsonl` for the new task. A platform that cannot spawn sub-agents MUST be excluded — it doesn't consume jsonl.
 
-Same root reason as `cli_adapter.py`: Python scripts run at user-project runtime and can't import from the TS `AI_TOOLS` registry, so they maintain their own parallel registry. When adding/removing sub-agent capability, update both in tandem.
+Python scripts run at user-project runtime and can't import from the TS `AI_TOOLS` registry, so they maintain their own parallel registry. When adding or removing sub-agent capability, update both in tandem.
 
 > **Codex-specific CLIAdapter notes:**
 >
@@ -728,9 +532,7 @@ If Trellis project itself should support the new platform:
 | `test/configurators/platforms.test.ts`   | Detection test: `getConfiguredPlatforms` recognizes tracked Trellis templates but ignores native platform directories. Content test: `configurePlatform` writes the expected paths, no compiled artifacts. **The `configure` ⟷ `collectTemplates` parity assertions are registry-wide and cover a new platform automatically — do not copy them per platform** |
 | `test/commands/init.integration.test.ts` | Init test: `init({ {platform}: true })` creates correct directory. Negative assertions: add `.{configDir}` checks to existing platform tests                                                                            |
 | `test/templates/extract.test.ts`         | `get{Platform}TemplatePath()` returns existing dir. `get{Platform}SourcePath()` deprecated alias equals template path                                                                                                   |
-| `test/regression.test.ts`                | Platform registration: `AI_TOOLS.{platform}` exists with correct `configDir`. cli_adapter: `commonCliAdapter` contains `"{platform}"` and `".{configDir}"`. Update `withTracking` list if `collectTemplates` is defined |
-
-For extension-backed platforms like Pi Agent, add explicit regression coverage that no Python hook files are installed under the platform config directory and that the generated extension exposes the required sub-agent and hook-equivalent event surface.
+| `test/regression.test.ts`                | Platform registration: `AI_TOOLS.{platform}` exists with correct `configDir`. Update the `withTracking` list if `collectTemplates` is defined |
 
 ---
 
@@ -762,17 +564,15 @@ export function collectSharedHooks(
 ```
 
 The invocation half has no shared signature — it is a literal inside each
-platform's own config template (`settings.json`, `hooks.json`, `config.json`,
-`.kiro.hook`, the agent JSON's `hooks` object …).
+platform's own config template (`.claude/settings.json`, `.codex/hooks.json`, …).
 
 ### 3. Contracts
 
 - `SharedHookPlatform` is a string-union type, so a platform not in the union
   cannot be passed to `collectSharedHooks` at all. That is the guard for
   extension-backed platforms.
-- Declaring `"inject-shell-session-context.py"` for a platform obliges its
-  config template to invoke `hooks/inject-shell-session-context.py` on
-  whichever pre-shell event the host publishes.
+- Declaring a hook for a platform obliges its config template to invoke
+  `hooks/<hook-name>` on whichever event the host publishes for it.
 - The reverse also binds: a config that invokes a shared hook the platform does
   not declare points at a path that will never exist on disk.
 - The hooks path passed to `collectSharedHooks` must be the same directory the
@@ -798,14 +598,14 @@ tables name the file without invoking it.
 ### 5. Good / Base / Bad Cases
 
 - **Good** — a platform gains a pre-shell event: add it to the table *and* add the invocation to its config template, in the same change. The test proves both halves landed.
-- **Base** — Kiro. Deliberately **not** wired: neither of its two hook surfaces (CLI agent JSON `hooks.{agentSpawn,userPromptSubmit}` and IDE `.kiro.hook` `when.type`) publishes a pre-tool trigger, and an unknown key in the agent JSON risks the whole agent failing to load. The probe that would settle it is recorded in the declaration comment — run Kiro, check its hook trigger list.
+- **Base** — a platform with no pre-shell trigger is deliberately **not** wired: it declares no shell-session hook, so nothing is installed for an event that would never fire.
 - **Bad** — declaring the hook and "wiring it later". The file ships, `trellis update` starts managing it, users see it in their repo, and nothing calls it. This is precisely the state the test now makes unreachable.
 
 ### 6. Tests Required
 
 - Both direction assertions above, derived from `SHARED_HOOKS_BY_PLATFORM` — never from a hard-coded platform list.
 - A non-vacuity assertion on the filter itself. Without it, renaming the hook turns every other assertion into a no-op that still passes.
-- Per-platform registration tests for the hooks whose config shape is unusual (`shared-hooks.test.ts` has explicit ones for kiro and zcode).
+- Per-platform registration tests for the hooks whose config shape is unusual.
 
 ### 7. Wrong vs Correct
 
@@ -836,280 +636,6 @@ foo: ["session-start.py", "inject-shell-session-context.py"],
 
 ---
 
-## Scenario: Extension-Backed Platform Support
-
-### 1. Scope / Trigger
-
-Use this pattern when a platform provides project-local JS/TS extension events and custom tools rather than Trellis-compatible Python hooks. Pi Agent is the reference implementation.
-
-### 2. Signatures
-
-TypeScript registry:
-
-```typescript
-AI_TOOLS.pi = {
-  configDir: ".pi",
-  cliFlag: "pi",
-  hasPythonHooks: false,
-  templateContext: {
-    agentCapable: true,
-    hasHooks: true,
-  },
-};
-```
-
-Configurator output:
-
-```text
-.pi/settings.json
-.pi/prompts/trellis-<command>.md
-.agents/skills/<skill>/SKILL.md
-.pi/agents/trellis-<agent>.md
-.pi/extensions/trellis/index.ts
-```
-
-Runtime script registry:
-
-```python
-Platform = Literal[..., "pi", "zcode"]
-_SUBAGENT_CONFIG_DIRS = (..., ".pi", ".zcode")
-```
-
-### 3. Contracts
-
-Extension-backed platforms MUST NOT receive `.trellis/templates/shared-hooks/*.py` under their config directory. Their hook-equivalent behavior belongs in generated extension source.
-
-For Pi Agent:
-
-| Trellis concept                    | Pi surface                                                                                                                                                                                                                                                                               |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Session start                      | `session_start` extension event (notify-only; context-key is established but no prompt mutation)                                                                                                                                                                                         |
-| Per-turn workflow-state breadcrumb | `before_agent_start.message` hidden custom message — persists cached `<workflow-state>` + `<session-overview>` from `getTurnCtx()` without showing it in the UI; skipped when identical to the last persisted runtime context (dedup)                                                    |
-| Startup context                    | `before_agent_start` builds compact SessionStart-equivalent context (`<session-context>`, adaptive `<first-reply-notice>`, `<session-overview>`, `<trellis-workflow>`, `<ready>`) once per context key, memoizes it, and contributes the identical bytes to `systemPrompt` on every turn |
-| Per-agent-invocation context       | `before_agent_start.systemPrompt` carries a per-context-key snapshot of task context (PRD + jsonl) taken on first use; later on-disk task changes are delivered through `before_agent_start.message` as `<trellis-task-context-update>` persisted messages                               |
-| Per-Bash-tool session identity     | `tool_call` extension event; mutates `event.input.command` in place via `injectTrellisContextIntoBash()` to prefix `export TRELLIS_CONTEXT_ID=<context-key>;`                                                                                                                            |
-| Sub-agent dispatch                 | custom `trellis_subagent` tool with `promptSnippet`/`promptGuidelines = SUBAGENT_DISPATCH_PROTOCOL`; resolves the Pi CLI JS entrypoint when possible, runs `--mode text -p --no-session`, sends the delegated prompt through stdin, and forwards `TRELLIS_CONTEXT_ID`                    |
-
-The compact model-visible context injection point is `before_agent_start.message`; it uses `TurnContextCache` so the same request path does not re-spawn the default `get_context.py` session-context call unnecessarily. Pi does not register a Trellis `input` handler for runtime context injection, so user text is not rewritten. The existing Pi `context` event may establish the context key, but it must not append Trellis runtime messages because request-local messages are not persisted and can break provider prefix cache. See "Class-3 injection points (Pi extension)" below the modes table for the runtime contract.
-
-Cache-stability invariant: everything the extension contributes to `systemPrompt` must be byte-identical across every turn of a session (provider prefix caches invalidate from byte 0 on any system prompt change). Startup context and task context are therefore memoized per context key; anything volatile (workflow breadcrumb, session overview, task-doc changes) is delivered exclusively through persisted `before_agent_start.message` custom messages, and only when its content differs from the last persisted copy.
-
-If `agentCapable` is true, `task.py create` must seed `implement.jsonl` / `check.jsonl`, and generated sub-agent definitions or extension code must consume those files.
-
-### 4. Validation & Error Matrix
-
-| Condition                                                                     | Behavior                                                                                |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `hasHooks: true` and `hasPythonHooks: false`                                  | Init does not run Windows Python hook detection for the platform                        |
-| Platform can spawn Trellis sub-agents                                         | Add config dir to `_SUBAGENT_CONFIG_DIRS`                                               |
-| Platform cannot consume JSONL context                                         | Keep it out of `_SUBAGENT_CONFIG_DIRS` even if it has commands/skills                   |
-| Generated extension source is tracked                                         | `collectTemplates()` must include the same path written by `configure{Platform}`        |
-| Extension path contains `spec/` in a skill name such as `trellis-update-spec` | Template hash exclusion must not drop it; only `.trellis/spec/` is user-owned spec data |
-| Platform uses extension hooks                                                 | Do not copy Python hook files into the platform config dir                              |
-
-### 5. Good / Base / Bad Cases
-
-Good:
-
-```text
-.pi/extensions/trellis/index.ts
-.pi/agents/trellis-implement.md
-.agents/skills/update-spec/SKILL.md
-```
-
-Base:
-
-```text
-.pi/prompts/trellis-continue.md
-.pi/settings.json
-```
-
-Bad:
-
-```text
-.pi/hooks/session-start.py
-.pi/hooks/inject-subagent-context.py
-```
-
-### 6. Tests Required
-
-Add or update tests that assert:
-
-- `AI_TOOLS.<platform>` has the expected `configDir`, `cliFlag`, `agentCapable`, `hasHooks`, and `hasPythonHooks`.
-- `configurePlatform("<platform>")` writes every generated file and writes no Python hook files for extension-backed platforms (canonical assertion: `expect(fs.existsSync(".pi/hooks")).toBe(false)` in `test/configurators/platforms.test.ts`).
-- `collectPlatformTemplates("<platform>")` matches init output paths.
-- `init({ <flag>: true })` creates platform assets and tracks hashes for all generated templates.
-- `get_context.py --mode phase --platform <platform>` routes to sub-agent-capable workflow blocks when `agentCapable` is true.
-- Runtime script copies (`src/templates/trellis/scripts/**` and live `.trellis/scripts/**`) both recognize the platform.
-- The generated extension registers handlers for the Pi runtime surfaces (`before_agent_start`, `context`, `tool_call`) plus the `subagent` custom tool with `promptSnippet`/`promptGuidelines` set to the dispatch protocol constant, and does not register `input` for Trellis runtime context injection.
-- The TS-port workflow-state regex (`WF_RE` in `templates/pi/extensions/trellis/index.ts.txt:1072`) matches the same status names and body content as the Python `_TAG_RE` on a shared fixture from `templates/trellis/workflow.md`.
-
-### 7. Wrong vs Correct
-
-#### Wrong
-
-```typescript
-for (const [k, v] of collectSharedHooks(".pi/hooks", "pi")) {
-  files.set(k, v);
-}
-```
-
-This installs Python hooks into a platform whose hook surface is a TypeScript extension API. (It would not even compile — `pi` is not a `SharedHookPlatform` — which is the intended guard.)
-
-#### Correct
-
-```typescript
-files.set(".pi/extensions/trellis/index.ts", getExtensionTemplate());
-```
-
-Extension-backed platforms keep hook-equivalent behavior in platform-native extension files and test those files as templates.
-
----
-
-## Scenario: Pi Sub-Agent Launcher
-
-### 1. Scope / Trigger
-
-Use this contract when `.pi/extensions/trellis/index.ts` launches a nested Pi process for the Trellis `subagent` tool.
-
-This is Windows-sensitive runtime integration. Node `spawn("pi", ...)` can fail with `ENOENT` when Pi is installed through an npm shim instead of a real `pi.exe`, and passing the full delegated prompt as an argv value can hit platform argument-length limits.
-
-### 2. Signatures
-
-Launcher resolver:
-
-```typescript
-interface PiInvocation {
-  command: string;
-  argsPrefix: string[];
-}
-
-function resolvePiInvocation(): PiInvocation;
-```
-
-Nested launch:
-
-```typescript
-spawn(
-  invocation.command,
-  [...invocation.argsPrefix, "--mode", "text", "-p", "--no-session"],
-  {
-    cwd: projectRoot,
-    env: { ...process.env, TRELLIS_CONTEXT_ID: contextKey },
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-  },
-);
-```
-
-### 3. Contracts
-
-| Field / Env         | Contract                                                                                                                                                                                                             |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRELLIS_PI_CLI_JS` | Optional absolute or relative path to `@mariozechner/pi-coding-agent/dist/cli.js`; if set, it is authoritative                                                                                                       |
-| `command`           | `process.execPath` when a CLI JS entrypoint is resolved; otherwise `"pi"` fallback                                                                                                                                   |
-| `argsPrefix`        | `[cliJs]` for resolved JS entrypoint; `[]` for fallback                                                                                                                                                              |
-| Prompt transport    | Write delegated prompt to `child.stdin`, never as a positional argv prompt                                                                                                                                           |
-| Output mode         | Use `--mode text`; keep final-output formatter tolerant of structured or diagnostic output                                                                                                                           |
-| Context             | Forward `TRELLIS_CONTEXT_ID` into the child env when available                                                                                                                                                       |
-| Agent config        | Parse `model`, `thinking`, and `fallbackModels` from `.pi/agents/*.md` frontmatter                                                                                                                                   |
-| Per-call overrides  | `trellis_subagent` tool input may override frontmatter with `model` and `thinking`                                                                                                                                   |
-| Agent validation    | `isTrellisAgent()` checks `existsSync(.pi/agents/trellis-{agent}.md)` before spawn; invalid → returns error text listing community alternatives                                                                      |
-| Model/thinking args | If model and thinking are present and model has no thinking suffix, pass `--model <model>:<thinking>`; if model already has a suffix, pass it unchanged; if thinking exists without model, pass `--thinking <level>` |
-| Output buffers      | Bound stdout and stderr collection separately; keep the tail plus truncation notice                                                                                                                                  |
-
-Candidate JS entrypoint lookup should cover:
-
-```text
-process.argv entries ending in pi-coding-agent/dist/cli.js
-npm_config_prefix / NPM_CONFIG_PREFIX
-APPDATA/npm
-PATH entries, their parent directories, and parent/lib variants
-```
-
-### 4. Validation & Error Matrix
-
-| Condition                                      | Behavior                                                                             |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `TRELLIS_PI_CLI_JS` points to an existing file | Launch with `process.execPath` and `[cliJs, "--mode", "text", "-p", "--no-session"]` |
-| `TRELLIS_PI_CLI_JS` points to a missing file   | Reject with an error naming `TRELLIS_PI_CLI_JS` and the resolved missing path        |
-| A candidate CLI JS entrypoint exists           | Launch with `process.execPath` and the candidate path                                |
-| No candidate CLI JS entrypoint exists          | Fall back to `spawn("pi", ["--mode", "text", "-p", "--no-session"])`                 |
-| `AbortSignal` is already aborted               | Reject before spawning                                                               |
-| `AbortSignal` fires after spawn                | Kill the child and reject with `pi subagent cancelled`                               |
-| Child exits non-zero                           | Reject with stderr, else stdout, else an exit-code message                           |
-| stdout/stderr exceed limits                    | Keep the most recent bytes and prefix output with a truncation notice                |
-
-### 5. Good / Base / Bad Cases
-
-Good:
-
-```typescript
-const invocation = resolvePiInvocation();
-const child = spawn(
-  invocation.command,
-  [...invocation.argsPrefix, "--mode", "text", "-p", "--no-session"],
-  { stdio: ["pipe", "pipe", "pipe"] },
-);
-child.stdin?.end(prompt);
-```
-
-Base:
-
-```typescript
-return { command: "pi", argsPrefix: [] };
-```
-
-Bad:
-
-```typescript
-spawn("pi", ["--mode", "json", "-p", "--no-session", prompt]);
-```
-
-### 6. Tests Required
-
-Add or update template/configurator tests that assert:
-
-- the generated extension contains `resolvePiInvocation`, `TRELLIS_PI_CLI_JS`, `process.execPath`, `APPDATA`, npm prefix lookup, and PATH splitting by `delimiter`;
-- the generated extension writes the prompt through `child.stdin?.end(prompt)`;
-- the generated extension contains bounded stdout/stderr collectors;
-- the old argv launcher and `toPiPromptArgument` are absent;
-- `.pi/extensions/trellis/index.ts` stays byte-for-byte aligned with `src/templates/pi/extensions/trellis/index.ts.txt`;
-- the dogfood extension compiles as TypeScript independently of the package build.
-
-### 7. Wrong vs Correct
-
-#### Wrong
-
-```typescript
-spawn("pi", [
-  "--mode",
-  "json",
-  "-p",
-  "--no-session",
-  toPiPromptArgument(prompt),
-]);
-```
-
-This depends on direct executable lookup for `pi` and uses argv for an unbounded generated prompt.
-
-#### Correct
-
-```typescript
-const invocation = resolvePiInvocation();
-const child = spawn(
-  invocation.command,
-  [...invocation.argsPrefix, "--mode", "text", "-p", "--no-session"],
-  { stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
-);
-
-child.stdin?.end(prompt);
-```
-
-Resolve npm-shim installs through the real JS entrypoint when possible, keep `pi` as the compatibility fallback, and transport generated prompts through stdin.
-
----
-
 ## What You DON'T Need to Update
 
 These are now **automatically derived** from the registry:
@@ -1131,27 +657,8 @@ These are now **automatically derived** from the registry:
 
 | Platform    | Command Format                                                         | File Format                                                   | Example (finish-work)        |
 | ----------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------- |
-| Claude Code | `/trellis:xxx`                                                         | Markdown (`.md`)                                              | `/trellis:finish-work`       |
-| Cursor      | `/trellis-xxx`                                                         | Markdown (`.md`)                                              | `/trellis-finish-work`       |
-| OpenCode    | `/trellis:xxx`                                                         | Markdown (`.md`)                                              | `/trellis:finish-work`       |
-| Gemini CLI  | `/trellis:xxx`                                                         | TOML (`.toml`)                                                | `/trellis:finish-work`       |
-| Kilo        | `/<workflow-name>`                                                     | Markdown (`.md`)                                              | `/finish-work`               |
-| Codex       | `$<skill-name>` / `/skills`                                            | Markdown (`SKILL.md`)                                         | `$finish-work`               |
-| Kiro        | `$<skill-name>` / `/skills`                                            | Markdown (`SKILL.md`)                                         | `$finish-work`               |
-| Qoder       | `/trellis-<name>` (commands) + `$<skill-name>` / `/skills` (workflows) | Markdown (`.md` with frontmatter + `SKILL.md`)                | `/trellis-finish-work`       |
-| Antigravity | `/<workflow-name>`                                                     | Markdown (`.md`)                                              | `/finish-work`               |
-| CodeBuddy   | `/trellis:xxx`                                                         | Markdown (`.md`)                                              | `/trellis:finish-work`       |
-| Copilot     | `/trellis:xxx`                                                         | Markdown (`.prompt.md`)                                       | `/trellis:finish-work`       |
-| Droid       | `/trellis:xxx`                                                         | Markdown (`.md`)                                              | `/trellis:finish-work`       |
-| Devin       | `/trellis-xxx`                                                         | Markdown (`.md`) + `SKILL.md`                                 | `/trellis-finish-work`       |
-| Pi Agent    | `/trellis-xxx` prompt templates + `/skill:<name>` skills               | Markdown (`.md`) + `SKILL.md` + TypeScript extension          | `/trellis-finish-work`       |
-| Trae IDE    | `/trellis-xxx` commands + skills                                       | Markdown (`.md` with frontmatter) + `SKILL.md` + `hooks.json` | `/trellis-finish-work`       |
-| Oh My Pi    | `/trellis-xxx`                                                         | Markdown (`.md` with YAML frontmatter) + TypeScript extension | `/trellis-finish-work`       |
-| Kimi Code   | `/skill:trellis-<name>` skills                                         | Markdown (`SKILL.md`)                                         | `/skill:trellis-finish-work` |
-| Reasonix    | `/skill trellis-<name>`                                                | Markdown (`SKILL.md`)                                         | `/skill trellis-finish-work` |
-| ZCode       | `/trellis:xxx`                                                         | Markdown (`.md`) + `SKILL.md` + `config.json`                 | `/trellis:finish-work` |
-| Grok Build  | `/trellis-xxx`                                                         | Markdown (`.md`) + `SKILL.md`                                 | `/trellis-finish-work` |
-| Snow CLI    | `/trellis-xxx`                                                         | JSON prompt commands (`.json`) + `SKILL.md`                   | `/trellis-finish-work` |
+| Claude Code | `/trellis:xxx`               | Markdown (`.md`)      | `/trellis:finish-work` |
+| Codex       | `$<skill-name>` / `/skills` | Markdown (`SKILL.md`) | `$finish-work`         |
 
 When creating platform templates, ensure references match the platform's interaction format and file format. The authoritative prefix is `AI_TOOLS[id].templateContext.cmdRefPrefix` — this table restates it for orientation, so check the registry when they disagree.
 
@@ -1159,95 +666,44 @@ When creating platform templates, ensure references match the platform's interac
 
 Commands emitted by `resolveCommands(ctx)` / `resolveAllAsSkills(ctx)` / `resolveAllAsSkillsNeutral(ctx)` in `src/configurators/shared.ts`:
 
-| Command       | `agentCapable && hasHooks` (13)                                                                                                                                                                                                                | `agentCapable && !hasHooks` (5)                                                                       | `!agentCapable` (3)                                  |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `start`       | ✔ filtered by the shared resolver — SessionStart-style hook injects opening context, user-facing `/start` would be redundant. Pi is the approved exception and re-adds `.pi/prompts/trellis-start.md` because `session_start` is notify-only. | ✅ emitted (skill and/or slash command per platform) — no hook fires, users need an invocable `start` | ✅ emitted — manual equivalent of session-start hook |
-| `continue`    | ✅ emitted                                                                                                                                                                                                                                    | ✅ emitted                                                                                            | ✅ emitted                                           |
-| `finish-work` | ✅ emitted                                                                                                                                                                                                                                    | ✅ emitted                                                                                            | ✅ emitted                                           |
+| Command       | `agentCapable && hasHooks`                                                                                                        | `agentCapable && !hasHooks`                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `start`       | ✔ filtered by the shared resolver — a SessionStart-style hook injects opening context, so a user-facing `/start` would be redundant | ✅ emitted (skill and/or slash command per platform) — no hook fires, users need an invocable `start` |
+| `continue`    | ✅ emitted                                                                                                                        | ✅ emitted                                                                                            |
+| `finish-work` | ✅ emitted                                                                                                                        | ✅ emitted                                                                                            |
 
-**Rule**: filter is by `ctx.agentCapable && ctx.hasHooks` — **both flags required** (changed in 0.6.4; the prior single-flag rule silently dropped `start` from Codex / ZCode / OpenCode / Reasonix). `agentCapable` alone is not a proxy for "has a session-start mechanism" because some agent-capable platforms ship without a SessionStart-equivalent hook and rely on user-invocable `start` instead.
+**Rule**: filter is by `ctx.agentCapable && ctx.hasHooks` — **both flags required** (changed in 0.6.4; the prior single-flag rule silently dropped `start` from Codex). `agentCapable` alone is not a proxy for "has a session-start mechanism" because an agent-capable platform can ship without a SessionStart-equivalent hook and rely on a user-invocable `start` instead.
 
-- `agentCapable && hasHooks` (13): `claude-code, cursor, kiro, gemini, qoder, codebuddy, copilot, droid, pi, zcode, trae, omp, snow`
-- `agentCapable && !hasHooks` (5): `opencode, codex, reasonix, grok, kimi` — Codex has a UserPromptSubmit hook but no SessionStart; OpenCode has a `plugins/session-start.js` plugin but registry-`hasHooks` is reserved for the SessionStart-style hook protocol; Reasonix and Grok have neither; Kimi has hooks only in the user-level `~/.kimi-code/config.toml` (no project-level hook file Trellis may write).
-- `!agentCapable` (3): `kilo, antigravity, devin`
+- `agentCapable && hasHooks`: `claude-code`
+- `agentCapable && !hasHooks`: `codex` — it has SessionStart / UserPromptSubmit hook entries in `.codex/hooks.json`, but registry-`hasHooks` marks the SessionStart-style *context-injection protocol* Trellis can rely on without a user-level opt-in, and Codex hooks require `features.hooks = true` in `~/.codex/config.toml` first.
 
 These three groups are computed from `AI_TOOLS[id].templateContext`; if you change a flag, recount rather than editing one line.
 
-> ZCode joined `agentCapable && hasHooks` in the zcode-hook-support task: it ships a workspace hook config at `.zcode/config.json` covering SessionStart + UserPromptSubmit (reusing the shared `session-start.py` / `inject-workflow-state.py`). Live probing confirmed ZCode PreToolUse with matcher `Agent|Task` can mutate the sub-agent prompt through `hookSpecificOutput.updatedInput`, so ZCode is **class-1** for sub-agent context and ships `inject-subagent-context.py`.
+> **Gotcha**: do not treat `hasHooks=false` as "platform has no automation at all". For Codex it means "no SessionStart-style protocol Trellis can rely on without a user-level opt-in" — its own hook config still injects context once enabled. The flag is a hook-protocol marker, not a capability summary. When filtering by capability, query the actual capability you need, never assume a default pairing from one boolean.
 
-> **Gotcha**: do not treat `hasHooks=false` as "platform has no automation at all". For OpenCode it means "no SessionStart hook protocol" — its plugin still injects context. The flag is a hook-protocol marker, not a capability summary. When filtering by capability, query the actual capability you need, never assume a default pairing from one boolean.
+## Subagent Context Injection: Hook-based vs Pull-based
 
-## Subagent Context Injection: Hook-based vs Pull-based vs Extension-backed
+Trellis sub-agents (implement / check / research) need task context (`prd.md` + spec files listed in `implement.jsonl` / `check.jsonl`) at startup. There are **two** delivery classes depending on the platform's hook capabilities. The class-1 / class-2 labels below are also used by the `[workflow-state:in_progress]` breadcrumb body — keep terminology stable across writers.
 
-Trellis sub-agents (implement / check / research) need task context (`prd.md` + spec files listed in `implement.jsonl` / `check.jsonl`) at startup. There are **three** delivery classes depending on the platform's hook capabilities. The class-1 / class-2 / class-3 labels below are also used by the `[workflow-state:in_progress]` breadcrumb body and by the Pi `SUBAGENT_DISPATCH_PROTOCOL` constant — keep terminology stable across all three writers.
+| Class                     | Mechanism                                                                                                                                                                                                  | Platforms                |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| **Class-1** — Hook-inject | Native hook fires at sub-agent start and injects context before the child runs, either by rewriting the spawn prompt or adding developer context                                                            | Claude Code, Codex       |
+| **Class-2** — Pull-based  | Platform lacks a Trellis-supported native sub-agent context injection hook; Trellis injects a "Required: Load Trellis Context First" prelude into each definition so the sub-agent reads context at startup | none currently installed |
 
-| Class                          | Mechanism                                                                                                                                                                                                      | Platforms                                                     |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| **Class-1** — Hook-inject      | Native hook or plugin fires at sub-agent start and injects context before the child runs, either by rewriting the spawn prompt or adding developer context                                                        | Claude Code, Cursor, OpenCode, Kiro, CodeBuddy, Codex, Factory Droid, ZCode, Snow CLI |
-| **Class-2** — Pull-based       | Platform lacks a Trellis-supported native sub-agent context injection hook; Trellis injects a "Required: Load Trellis Context First" prelude into each definition so the sub-agent reads context at startup     | Gemini CLI, Qoder, Copilot, Reasonix, Trae IDE, Grok Build, Kimi Code  |
-| **Class-3** — Extension-backed | Platform exposes hook-equivalent events and custom tools through a project-local TypeScript extension; Trellis owns the sub-agent tool and the context injection path                                          | Pi Agent, Oh My Pi                                           |
+### Class-1 — Hook-inject
 
-### Class-1 — Hook-inject (9 platforms)
+The platform's native sub-agent-start hook delivers context before the child runs. Claude Code rewrites the spawn prompt; Codex emits developer context through `SubagentStart`. Trellis's `inject-subagent-context.py` reads `prd.md` + the JSONL-referenced spec files for that delivery.
 
-Platform's native sub-agent-start hook delivers context before the child runs. Most platforms rewrite the spawn prompt; Codex emits developer context through `SubagentStart`. Trellis's `inject-subagent-context.py` (or the platform's own plugin/hook) reads `prd.md` + the JSONL-referenced spec files for that delivery.
+| Platform    | Hook event                                   | Mechanism                                                        |
+| ----------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| Claude Code | `PreToolUse` + matcher `Task`/`Agent`        | `updatedInput.prompt`                                            |
+| Codex       | `SubagentStart` + exact Trellis-role matcher | `hookSpecificOutput.additionalContext`; child-side pull fallback |
 
-| Platform      | Hook event                                   | Mechanism                                                        |
-| ------------- | -------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code   | `PreToolUse` + matcher `Task`/`Agent`        | `updatedInput.prompt`                                            |
-| CodeBuddy     | `PreToolUse` + matcher `Task`                | `modifiedInput.prompt` (same as Claude)                          |
-| Codex         | `SubagentStart` + exact Trellis-role matcher | `hookSpecificOutput.additionalContext`; child-side pull fallback |
-| Cursor        | `preToolUse` + matcher `Task          | Subagent`                               | `updated_input.prompt` (Cursor staff marked Task prompt mutation fixed on 2026-04-07; current Cursor may emit native sub-agent calls as tool name `Subagent`, and native Task args may encode custom agents as `subagent_type.custom.name`) |
-| Factory Droid | `PreToolUse` + matcher `Task`         | `updatedInput.prompt`                   |
-| Kiro          | per-agent `agentSpawn` hook           | direct stdout context                   |
-| OpenCode      | JS plugin `tool.execute.before`       | `args.prompt` mutation                  |
-| Snow CLI      | `beforeSubAgentStart`                 | own `write-trellis-context.py subagent` (Snow bundles all three inject hooks; it is not in `SHARED_HOOKS_BY_PLATFORM`) |
-| ZCode         | `PreToolUse` + matcher `Agent|Task`   | `hookSpecificOutput.updatedInput.prompt` |
-
-#### OpenCode injection contract (issue #264)
-
-OpenCode is a hybrid class-1 platform: its main session uses `tool.execute.before` for sub-agent prompt mutation, but it also runs separate `chat.message` plugins (`session-start.js`, `inject-workflow-state.js`) that fire for **every** chat turn — including sub-agent child sessions. Without explicit filtering, those plugins inject 30-40KB of main-session SessionStart context into sub-agent turns and drown the parent's intended prompt injection.
-
-**Required contract** for any OpenCode `chat.message` plugin that mutates `output.parts`:
-
-```js
-import { isTrellisSubagent } from "../lib/trellis-context.js"
-
-"chat.message": async (input, output) => {
-  if (isTrellisSubagent(input)) {
-    // input.agent matched /^trellis-(implement|check|research)$/
-    // Sub-agent context is injected by inject-subagent-context.js on the
-    // parent's tool.execute.before — do not double-inject here.
-    return
-  }
-  // ... main-session injection ...
-}
-```
-
-`isTrellisSubagent()` lives in `lib/trellis-context.js`; the regex matches `trellis-implement` / `trellis-check` / `trellis-research` exactly.
-
-**Sub-agent task resolution order** in `inject-subagent-context.js` `tool.execute.before` (only later steps run when earlier ones miss):
-
-1. Exact session runtime context lookup for `input.sessionID` (writes a `session:<key>` source)
-2. `Active task: <path>` line parsed from `args.prompt` first non-empty line (source `prompt-hint`) — explicit per-dispatch override, beats single-session inference so multi-window users can disambiguate
-3. Single-session fallback in `TrellisContext._resolveSingleSessionFallback()` — only when exactly 1 file exists in `.trellis/.runtime/sessions/`; refuses to guess when 0 or ≥2 files exist (source `session-fallback:<context_key>`). Mirrors Python `_resolve_single_session_fallback` (`active_task.py:497-519`).
-
-`buildPrompt()` for implement / check / finish / research **must** prepend `<!-- trellis-hook-injected -->` so generated agent definitions in `.opencode/agents/*.md` can detect a successful injection (Trellis-internal contract; OpenCode itself ignores the marker).
-
-`getActiveTask()` in `lib/trellis-context.js` itself includes the single-session fallback so any caller (`workflow-state` breadcrumb, `session-start` task status) sees the same resolved task as the prompt injector. The fallback only activates when the explicit context-key lookup misses, so multi-window setups remain isolated.
+### Class-2 — Pull-based
 
 ### Class-2 — Pull-based (7 platforms)
 
-Platform's hook either does not expose a sub-agent-start event or cannot inject Trellis context. Sub-agents must read context themselves at startup. Trellis injects a "Required: Load Trellis Context First" prelude into each sub-agent definition file.
-
-| Platform   | Why native context injection is unavailable                                                                                                                                                                                                                                                                      |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gemini CLI | `BeforeTool` fires but [#18128](https://github.com/google-gemini/gemini-cli/issues/18128) hides chain-of-thought; reliability margin too thin                                                                                                                                                                    |
-| Qoder      | No `Task` tool concept; `SubagentStart` input has no `prompt` field; Context Isolation                                                                                                                                                                                                                           |
-| Copilot    | `preToolUse` doesn't enforce on subagents ([#2392](https://github.com/github/copilot-cli/issues/2392), [#2540](https://github.com/github/copilot-cli/issues/2540))                                                                                                                                               |
-| Reasonix   | Sub-agent skills run with `runAs: subagent`; no prompt-mutation hook exists, so workflow dispatch must carry the active task and the sub-agent skill reads task artifacts itself.                                                                                                                                |
-| Trae IDE   | `SessionStart` / `UserPromptSubmit` hooks cover main-session context, but no Trellis-supported sub-agent prompt mutation surface exists; generated `.trae/agents/*.md` files receive the pull-based prelude.                                                                                                     |
-| Grok Build | Hook stdout `additionalContext` is not consumed (verified on 0.2.x), so no Trellis hook is installed; dispatch goes through `spawn_subagent` and generated `.grok/agents/*.md` files receive the pull-based prelude.                                                                                             |
-| Kimi Code  | Hooks exist only in the user-level `~/.kimi-code/config.toml` (no project-level hook/settings file Trellis may write) and there are no custom sub-agent definitions (built-in coder/explore/plan only), so the Trellis agent prompts ship as `.kimi-code/skills/trellis-*/SKILL.md` with the pull-based prelude. |
+A platform whose hook either does not expose a sub-agent-start event or cannot inject Trellis context falls into this class: sub-agents must read context themselves at startup, so Trellis injects a "Required: Load Trellis Context First" prelude into each sub-agent definition file (`injectPullBasedPreludeMarkdown()` / `injectPullBasedPreludeToml()` in `src/configurators/shared.ts`). No currently registered platform needs it — Codex keeps the same prelude in its agent prompts purely as a fallback for the case where its hooks are not enabled at the user level.
 
 #### Active task discovery on class-2 platforms (issue #225)
 
@@ -1259,112 +715,20 @@ Sub-agents on class-2 platforms run as **separate sessions** with their own sess
 
 When changing the prelude, the dispatch protocol, or the `session-fallback` semantics, all three layers must stay aligned. `regression.test.ts > [issue-225]` and `regression.test.ts > [session-fallback]` are the contract tests; `templates/trellis.test.ts > [issue-225]` asserts the workflow.md breadcrumb still carries the protocol. Manual e2e runbook lives in the historical task `.trellis/tasks/<archive>/05-04-fix-codex-subagent-missing-active-task/manual-verify.md`.
 
-### Class-3 — Extension-backed (2 platforms)
-
-Platform can expose hook-equivalent events and custom tools through a project-local extension. Trellis owns the sub-agent tool and the context injection path. Unlike class-1 (which only handles sub-agent context) and class-2 (which only handles sub-agent prelude), class-3 owns hidden persistent custom-message context injection and per-Bash-tool-call session-identity prefixing through the platform extension API.
-
-| Platform | Extension surface                                                  | Context delivery                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| -------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pi Agent | `.pi/extensions/trellis/index.ts` events + `trellis_subagent` tool | extension builds full prompt/context from `.pi/agents/*.md`, `prd.md`, `design.md` if present, `implement.md` if present, and JSONL-referenced files via `buildContext()`; preserves startup/full task context through `before_agent_start.systemPrompt` and persists compact workflow/session context through a hidden `before_agent_start.message` custom message; agent definitions also receive the pull-based prelude as a fallback |
-| Oh My Pi | `.omp/extensions/trellis/index.ts` events                          | extension resolves a session-scoped context key from the OMP runtime, injects session/task context through extension events, and keeps JSONL-referenced files jailed inside the project root                                                                                                                                                                                                                                             |
-
-See **"Class-3 injection points (Pi extension)"** and **"Cross-platform consistency invariant"** below for the runtime contract details.
-
-### Class-3 injection points (Pi extension)
-
-`templates/pi/extensions/trellis/index.ts.txt` registers handlers for three platform events plus one custom tool. Each injection point has a distinct lifecycle and a distinct failure mode if dropped.
-
-| Injection point         | Handler                                              | When it fires                              | What it injects                                                                                                                                                                                                                                                                                         |
-| ----------------------- | ---------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `input`                 | not registered for Trellis runtime context           | n/a                                        | Trellis must not rewrite submitted user text; context identity is resolved in `before_agent_start` and `tool_call` where it is needed                                                                                                                                                                   |
-| `before_agent_start`    | `pi.on?.("before_agent_start", …)`                   | every agent invocation (main + sub-agents) | preserves `systemPrompt` with startup/full task context only, and additionally returns `message: { customType: "trellis-runtime-context", display: false, content }` containing compact `<workflow-state>` + `<session-overview>`; Pi wraps the message as a persisted `role: "custom"` session message |
-| `context`               | `pi.on?.("context", …)`                              | before each LLM call                       | preserves existing context-key establishment only; must not append request-local Trellis runtime messages because they are not persisted and can move between turns                                                                                                                                     |
-| `tool_call` (Bash)      | `pi.on?.("tool_call", …)`                            | every Bash tool call                       | mutates `event.input.command` in place via `injectTrellisContextIntoBash()` to prefix `export TRELLIS_CONTEXT_ID=<context-key>;` so child Python scripts (e.g. `task.py current`) inherit session identity                                                                                              |
-| `trellis_subagent` tool | `pi.registerTool?.({ name: "trellis_subagent", … })` | extension load time (once)                 | `promptSnippet` and `promptGuidelines` carry `SUBAGENT_DISPATCH_PROTOCOL` so the model sees the dispatch contract before it ever calls the tool                                                                                                                                                         |
-
-`TurnContextCache` (in `index.ts.txt`) memoizes the per-turn context-key → `{workflowState, sessionOverview}` pair so `before_agent_start` does not double-spawn the default `get_context.py` session-context call. The cache key is the resolved context key; entries are short-lived (one turn/request window).
-
-The startup context is tracked separately by resolved context key and contributes to `before_agent_start.systemPrompt` only once. It shells out to `get_context.py` for both the default session overview and `--mode phase --platform pi`, then wraps those canonical outputs in `<session-overview>` and `<trellis-workflow>`. Do not move this payload to `session_start`; Pi's event can notify the UI but has no model-visible context return path.
-
-### Cross-platform consistency invariant
-
-The body of the `<workflow-state>` breadcrumb MUST be byte-identical across class-1 (Python hook), class-2 (no breadcrumb — relies on session-start prelude), and class-3 (TS-port) writers. Agents reading workflow-state across platforms in the same conversation (e.g. user switching from Claude to Pi mid-task) must see the same content.
-
-Concrete rules:
-
-- **Regex parity**: `templates/pi/extensions/trellis/index.ts.txt:WF_RE` (`:1129`) MUST mirror `templates/shared-hooks/inject-workflow-state.py:_TAG_RE` (`:186`) byte-for-byte. Both use the closing-tag backreference `\1` (or its TS equivalent in `[\/workflow-state:\1\]`) so a tag block parses identically in Python and TypeScript.
-- **Breadcrumb body source**: `workflowBreadcrumb(root, key)` (`index.ts.txt:1131`) reads the path selected by `resolveWorkflowMd()` (`:1103`), which mirrors the Python task → personal → team → global precedence. There is no separate TS-side template for breadcrumb bodies. If the resolver or regex drifts, the TS port silently falls back to a hardcoded body and Pi loses parity.
-- **Status writer parity**: `task.json.status` is the sole input to "which `[workflow-state:STATUS]` block fires". Both the Python hook (`get_active_task` + status read) and the TS port (the status read inside `workflowBreadcrumb()`) MUST agree on the status string. Custom statuses pass through both unchanged.
-- **`<session-overview>` parity**: Pi shells out to `python3 .trellis/scripts/get_context.py` rather than re-implementing context generation in TS, so output stays canonical. Don't replace this with an inline TS implementation — that's a parity drift waiting to happen.
-
-#### Anti-pattern: bypassing the shared TS port
-
-```typescript
-// WRONG — re-implements parsing with a different regex
-const blocks = workflow.match(
-  /\[workflow-state:(\w+)\][\s\S]+?\[\/workflow-state/g,
-);
-```
-
-```typescript
-// WRONG — inline-formats <session-overview> differently than get_context.py
-const overview = `<session-overview>\n${gitStatus}\n${activeTasks}\n</session-overview>`;
-```
-
-```typescript
-// WRONG — rewrites the user's visible prompt and persists generated context as user-authored text
-function onInput(event, ctx) {
-  const overview = spawnSync("python3", [".trellis/scripts/get_context.py"]);
-  return { action: "transform", text: `${event.text}\n\n${overview}` };
-}
-```
-
-#### Correct
-
-```typescript
-// Match Python regex byte-for-byte (TS uses [\s\S]*? for cross-line; Python uses re.DOTALL)
-const WF_RE =
-  /\[workflow-state:([A-Za-z0-9_-]+)\]\s*\n([\s\S]*?)\n\s*\[\/workflow-state:\1\]/g;
-
-// Compact runtime context is persisted through before_agent_start as a hidden custom message.
-const onBeforeAgentStart = (event, ctx) => {
-  const turn = turnContextCache.get(projectRoot, contextKey);
-  const runtimeContext = [turn.wf, turn.ov].filter(Boolean).join("\n\n");
-  return {
-    message: runtimeContext
-      ? {
-          customType: "trellis-runtime-context",
-          content: runtimeContext,
-          display: false,
-        }
-      : undefined,
-    systemPrompt: [cur, startup, taskContext].filter(Boolean).join("\n\n"),
-  };
-};
-```
-
 ### Subagent dispatch protocol — single source of truth
 
-The dispatch protocol text (the `Active task: <path>` first-line rule plus the class-1 / class-2 / class-3 platform notes) appears in **two writers** and they MUST stay in sync:
+The dispatch protocol text (the `Active task: <path>` first-line rule plus the class-1 / class-2 platform notes) lives in one writer:
 
-| Writer                | Location                                                                  | Consumed by                                                                                                                        |
-| --------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Workflow breadcrumb   | `templates/trellis/workflow.md` `[workflow-state:in_progress]` block      | Python `inject-workflow-state.py` and the Pi TS port — surfaced per-turn while a task is in progress                               |
-| Pi extension constant | `templates/pi/extensions/trellis/index.ts.txt:SUBAGENT_DISPATCH_PROTOCOL` | Pi `trellis_subagent` tool's `promptSnippet` / `promptGuidelines` — surfaced at extension load and on each tool description render |
+| Writer              | Location                                                             | Consumed by                                                                                       |
+| ------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Workflow breadcrumb | `templates/trellis/workflow.md` `[workflow-state:in_progress]` block | Python `inject-workflow-state.py` — surfaced per-turn while a task is in progress                 |
 
-When you change one, change both. The two channels exist because:
-
-1. The breadcrumb is per-turn but only active when `task.json.status == in_progress`.
-2. The tool `promptSnippet` is always visible in the tool catalog, including before any task is started or in fresh windows where the breadcrumb hasn't fired yet.
-
-A drift between the two is silent: the model will still see _some_ dispatch guidance, just inconsistent guidance, and the resulting class-1/class-2/class-3 fallback chain breaks in subtle ways (e.g. sub-agent skips the `Active task:` line because the breadcrumb mentions it but the tool snippet doesn't, or vice versa).
+The breadcrumb is per-turn but only active when `task.json.status == in_progress`. Any second surface that restates the protocol (a tool description, an agent prelude) must be updated in the same commit, because a drift is silent: the model still sees *some* dispatch guidance, just inconsistent guidance, and the class-1 / class-2 fallback chain breaks in subtle ways.
 
 #### Tests required
 
 - Regression test asserting the `Active task:` rule appears in `templates/trellis/workflow.md` (`templates/trellis.test.ts > [issue-225]`).
-- Regression test asserting `workflow.md` Phase 2.1 routes generated pull-based sub-agent definitions through the pull-based block, not the `The platform hook/plugin auto-handles` block (`templates/trellis.test.ts > [issue-zcode-repeat]`). The test derives generated pull-based platforms from `collectPlatformTemplates()` by looking for `Required: Load Trellis Context First`; adding a new pull-based platform without adding its workflow marker mapping must fail. Pi is excluded from this derivation because its generated agents keep the same prelude as a fallback while the primary context path is class-3 extension-backed and is covered by Pi-specific tests.
-- Configurator test asserting the Pi extension's `SUBAGENT_DISPATCH_PROTOCOL` constant contains the same `Active task:` rule and the same class-1/class-2/class-3 platform list.
-- Cross-source parity test: when the breadcrumb text in `workflow.md` changes, the Pi extension's `SUBAGENT_DISPATCH_PROTOCOL` constant must change in the same commit. Either co-locate the parity assertion in a single regression test, or rely on diff review — but document the rule here.
+- Regression test asserting `workflow.md` Phase 2.1 routes generated pull-based sub-agent definitions through the pull-based block, not the `The platform hook/plugin auto-handles` block. The test derives generated pull-based platforms from `collectPlatformTemplates()` by looking for `Required: Load Trellis Context First`; adding a new pull-based platform without adding its workflow marker mapping must fail.
 
 ### Implementation
 
@@ -1373,7 +737,7 @@ Pull-based prelude is injected by `injectPullBasedPreludeMarkdown()` / `injectPu
 1. Calls `collectSharedHooks(dir, platform)` where `SHARED_HOOKS_BY_PLATFORM[platform]` excludes `inject-subagent-context.py` — no prompt-mutation hook installed
 2. Calls `detectSubAgentType(name)` → `injectPullBasedPrelude*()` on every sub-agent definition before adding it to the map
 
-Hook-inject platforms use the same `collectSharedHooks(dir, platform)` call with a capability-table entry that includes `inject-subagent-context.py`, and their hook-config template references that hook as before. ZCode follows this path through `.zcode/config.json` `PreToolUse` entries matching `Agent|Task`; its generated `.zcode/agents/*.md` files carry only the hook-failure fallback protocol, not the pull-based prelude.
+Hook-inject platforms use the same `collectSharedHooks(dir, platform)` call with a capability-table entry that includes `inject-subagent-context.py`, and their hook-config template references that hook. Their generated agent definitions carry only the hook-failure fallback protocol, not the pull-based prelude.
 
 ### Recursion guard in implement/check agent definitions
 
@@ -1391,14 +755,11 @@ some hosts can surface per-turn breadcrumbs inside sub-agent turns, while other
 hosts rely only on the agent definition text. The two channels must both be
 safe.
 
-For Cursor, `.cursor/hooks.json` must match both `Task` and `Subagent` on `preToolUse`. Current Cursor 3.2.11 emits native sub-agent spawns as `tool_name: "Subagent"` even though the docs still describe the generic Task tool under `Task`. `inject-subagent-context.py` must parse both legacy/string and native protobuf-shaped Task inputs. Custom agents can arrive as `subagent_type: "trellis-implement"`, `subagent_type: { "custom": { "name": "trellis-implement" } }`, or `subagent_type: { "type": { "case": "custom", "value": { "name": "trellis-implement" } } }`. All three forms must resolve to the Trellis agent name before deciding whether to inject context.
-
-Extension-backed platforms must not call `collectSharedHooks()` for their config directory — they are not keys in `SHARED_HOOKS_BY_PLATFORM`, so the call would not typecheck. They generate platform-native extension files and tests must assert that no Python hook files are installed under the platform config root.
 
 ### Audit reference
 
-Historical reliability audit (per-platform evidence, GitHub issues, Cursor
-staff confirmations, Claude Code canary test) lives in the archived task:
+Historical reliability audit (per-platform evidence, GitHub issues, Claude Code
+canary test) lives in the archived task:
 `.trellis/tasks/archive/2026-04/04-17-subagent-hook-reliability-audit/research/platform-hook-audit.md`
 
 ---
@@ -1421,7 +782,7 @@ Lightweight tasks may be PRD-only. Complex tasks must have `prd.md`, `design.md`
 1. **Create** — `task.py create` writes `task.json` with `status = planning`, creates the default `prd.md`, and seeds `implement.jsonl` / `check.jsonl` when a sub-agent-capable platform is detected.
 2. **Plan** — AI updates `prd.md`. If the task is complex, AI also writes `design.md` and `implement.md`; if sub-agent/spec context is needed, AI curates jsonl entries.
 3. **Review / start** — the user reviews the planning artifacts. `task.py start` is valid when the task's artifact gate is satisfied.
-4. **Consume** — hook, prelude, Pi extension, and OpenCode plugin read context in the same order: jsonl entries, `prd.md`, `design.md` if present, `implement.md` if present.
+4. **Consume** — hook and prelude read context in the same order: jsonl entries, `prd.md`, `design.md` if present, `implement.md` if present.
 
 ### Signatures
 
@@ -1450,7 +811,7 @@ Optional `type: "directory"` is supported for directory entries. Consumers ignor
 | Complex planning gate     | workflow-state / SessionStart / continue        | Requires `prd.md`, `design.md`, and `implement.md` before `task.py start`.         |
 | Seed detection            | Every jsonl consumer                            | Row without a `file` key is treated as non-entry and skipped.                      |
 | Empty-file tolerance      | hook / prelude / plugin readers                 | Missing or seed-only jsonl is tolerated; task artifacts still load.                |
-| Context order             | hook / prelude / Pi extension / OpenCode plugin | jsonl entries → `prd.md` → `design.md` if present → `implement.md` if present.     |
+| Context order             | hook / prelude                                  | jsonl entries → `prd.md` → `design.md` if present → `implement.md` if present.     |
 | Archived self-references  | `task_context.py` validation                    | Preserve JSONL bytes. For an archived task, remap only exact `.trellis/tasks/<same-task-name>/...` references into that archive copy. Other paths retain repo-root resolution. |
 
 ### Validation & Error Matrix
@@ -1522,25 +883,18 @@ leave every unrelated path on normal repository-root resolution.
 
 ### 1. Scope / Trigger
 
-Sub-agent context injection (hook Python + Pi extension TS + OpenCode plugin)
-caps how much task context is inlined into a sub-agent's first prompt. Added for
-#441 (task `07-22-subagent-context-limits`). Any change to injection formatting,
-caps, binary detection, or config keys MUST be applied to **all three**
-implementations:
-
-- `packages/cli/src/templates/shared-hooks/inject-subagent-context.py`
-- `packages/cli/src/templates/pi/extensions/trellis/index.ts.txt`
-- `packages/cli/src/templates/opencode/lib/trellis-context.js`
+Sub-agent context injection caps how much task context is inlined into a
+sub-agent's first prompt. Added for #441 (task
+`07-22-subagent-context-limits`). The single implementation is
+`packages/cli/src/templates/shared-hooks/inject-subagent-context.py`; if a
+second one is ever added (a plugin or extension port), injection formatting,
+caps, binary detection, and config keys must change in both in the same commit.
 
 ### 2. Signatures
 
 - Python: `common.config.get_context_injection_limits() -> dict[str, int]`,
   `truncate_utf8(data: bytes, cap: int) -> bytes`,
   `_is_binary_content(data: bytes) -> bool`
-- TS: `readContextInjectionLimits(repoRoot: string)`, `truncateUtf8(buf: Buffer, cap: number)`
-  (exported for tests via `loadExtensionInternals()` in `pi.test.ts`)
-- OpenCode JS: `readContextInjectionLimits(repoRoot)`, `truncateUtf8(buf, cap)`,
-  `materializeFile(basePath, filePath, reason, limits, budget)`
 
 ### 3. Contracts
 
@@ -1592,11 +946,6 @@ context_injection:
 - Python: `packages/cli/test/scripts/context-injection-limits.integration.test.ts`
   (probe-spawned; fixture matrix: at-cap / 1-over / UTF-8 straddle 2-byte & 3-byte /
   3-file total overflow / `0` disable / config override / golden under-cap / validate warnings).
-- TS: `packages/cli/test/templates/pi.test.ts` `describe("pi extension: context injection limits (issue #441)")`
-  — same matrix, asserts the exact frozen notice strings.
-- OpenCode: `packages/cli/test/templates/opencode.test.ts`
-  `describe("opencode context injection limits (issue #441)")` — same binary
-  and limit behavior through the real prompt-injection plugin seam.
 - Template: `trellis.test.ts` asserts config.yaml's `context_injection` section exists and is fully commented.
 
 ### 7. Wrong vs Correct
@@ -1610,13 +959,8 @@ headers/notices) toward the total budget.
 #### Correct
 
 Treat the notice strings, byte-based binary predicate, key names, ordering, and
-accounting rules above as a frozen cross-implementation contract; change all
-three loaders plus their regression suites in the same commit.
-
-> **Warning**: Pi's jsonl block format converged to the Python format
-> (`=== path ===` headers) in this change — an approved deviation from Pi's old
-> `## file` + `---` format. Directory-type jsonl entries remain Python-only; the
-> Pi extension skips them (pre-existing platform difference).
+accounting rules above as a frozen contract; change the loader and its
+regression suite in the same commit.
 
 ## Parent / Child Task Tree Contract
 
@@ -1666,7 +1010,7 @@ Load step detail on demand (both commands and hooks use this):
 ```bash
 python3 ./.trellis/scripts/get_context.py --mode phase                                   # Phase Index (no --step)
 python3 ./.trellis/scripts/get_context.py --mode phase --step 1.1                        # Step 1.1 (all platforms)
-python3 ./.trellis/scripts/get_context.py --mode phase --step 1.2 --platform cursor      # Step 1.2, cursor-filtered
+python3 ./.trellis/scripts/get_context.py --mode phase --step 1.2 --platform codex       # Step 1.2, codex-filtered
 ```
 
 Platform markers are filtered by matching `[...]` block membership against the given platform name (case-insensitive; accepts `claude-code` and `Claude Code`). Lines outside any marker block are always kept.
@@ -1676,10 +1020,9 @@ Platform markers are filtered by matching `[...]` block membership against the g
 ## Windows Encoding Fix
 
 All hook scripts that output to stdout must include the Windows encoding fix.
-This includes platform-specific `session-start.py` copies that opt out of
-`shared-hooks/session-start.py` (`codex/hooks/session-start.py` and
-`copilot/hooks/session-start.py`), because they still print JSON payloads with
-`ensure_ascii=False`.
+This includes the platform-specific `session-start.py` copy that opts out of
+`shared-hooks/session-start.py` (`codex/hooks/session-start.py`), because it
+still prints a JSON payload with `ensure_ascii=False`.
 
 When a hook can resolve the Trellis project directory before printing, prefer
 the shared helper from `.trellis/scripts/common/__init__.py`:
@@ -1737,27 +1080,21 @@ if sys.platform == "win32":
 Trellis uses a one-shot visible acknowledgment as proof that otherwise-hidden
 SessionStart context loaded. This contract applies to every live implementation
 that already provides that proof: the shared Python hook used by Claude Code,
-Cursor, Gemini, Qoder, CodeBuddy, Droid, Kiro, Trae, and ZCode; the Codex hook;
-OpenCode's startup plugin; and Pi's SessionStart-equivalent
-`before_agent_start` context.
+and Codex's own SessionStart hook.
 
 The acknowledgment is an instruction inside the existing context string, not a
-new payload field or host UI feature. Copilot remains notice-free until its
-model-visible consumption is verified end to end.
+new payload field or host UI feature.
 
 #### 2. Signatures
 
-| Implementation                                               | Injection signature                                                                                                             | Adaptive notice? |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ---------------: |
-| `shared-hooks/session-start.py`                              | Existing shared hook output (`hookSpecificOutput.additionalContext` plus host-specific aliases, or Kiro's plain stdout context) |              Yes |
-| `codex/hooks/session-start.py`                               | Existing Codex SessionStart payload when hooks are enabled and approved                                                         |              Yes |
-| `opencode/lib/session-utils.js` + `plugins/session-start.js` | Compact context prepended to the first user message and marked for persistence                                                  |              Yes |
-| `pi/extensions/trellis/index.ts.txt`                         | Memoized SessionStart-equivalent context added to `before_agent_start.systemPrompt`                                             |              Yes |
-| `copilot/hooks/session-start.py`                             | Microsoft's documented `SessionStart.hookSpecificOutput.additionalContext` payload                                              |               No |
+| Implementation                  | Injection signature                                                                                | Adaptive notice? |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------: |
+| `shared-hooks/session-start.py` | Existing shared hook output (`hookSpecificOutput.additionalContext` plus the snake_case alias)      |              Yes |
+| `codex/hooks/session-start.py`  | Existing Codex SessionStart payload when hooks are enabled and approved                            |              Yes |
 
 The **update-hint rider** (see below) is narrower still — it exists only in
-`shared-hooks/session-start.py`. Codex's own `session-start.py`, the OpenCode
-plugin, and the Pi extension each build their own payload and do not carry it.
+`shared-hooks/session-start.py`. Codex's own `session-start.py` builds its own
+payload and does not carry it.
 
 #### 3. Contracts
 
@@ -1780,8 +1117,6 @@ plugin, and the Pi extension each build their own payload and do not carry it.
   README frequency, commit history, or other repository content.
 - Keep hook payload keys, compact context content, event timing, and
   per-session deduplication unchanged.
-- OpenCode persists startup context once per session. Pi memoizes identical
-  startup `systemPrompt` bytes per context key.
 - **The Trellis update reminder rides this block, and only this block.** When
   `get_update_hint()` returns a hint, exactly one line is inserted between the
   notice head and tail: `Also relay this Trellis maintenance notice on its own
@@ -1798,10 +1133,7 @@ plugin, and the Pi extension each build their own payload and do not carry it.
 | Request has no clear natural language and project instructions explicitly establish a communication language | Acknowledgment uses the explicit project language                                               |
 | Neither request nor project instructions provide a language                                                  | Acknowledgment is exactly `Trellis SessionStart ✓`                                              |
 | Later assistant reply in the same session                                                                    | No repeated acknowledgment                                                                      |
-| Repeated OpenCode message in one session                                                                     | Startup context is not prepended again                                                          |
-| Repeated Pi turn with the same context key                                                                   | Memoized startup `systemPrompt` bytes remain stable                                             |
 | Shared or Codex hook output                                                                                  | Existing payload keys and `SessionStart` event name remain unchanged                            |
-| Copilot SessionStart                                                                                         | Context remains notice-free                                                                     |
 
 #### 5. Good / Base / Bad Cases
 
@@ -1820,12 +1152,6 @@ Chinese sentence`, includes a fixed Chinese acknowledgment, or causes the
 - Execute shared and Codex hook templates; assert exact payload shape, normal
   compact context blocks, the adaptive priority, neutral fallback, one-shot
   rule, and absence of fixed Chinese wording.
-- Build OpenCode context and exercise its plugin entry point; assert adaptive
-  notice content, first-message prefix and persistence, and no second injection
-  in the same session.
-- Exercise Pi `before_agent_start`; assert normal startup/workflow context,
-  adaptive notice content, and byte-stable memoized `systemPrompt` behavior.
-- Keep Copilot regression assertions notice-free.
 - Validate the injected instruction contract deterministically. Do not attempt
   to test an LLM's actual language classification in template tests.
 
@@ -1878,7 +1204,7 @@ def _build_first_reply_notice(update_hint: str | None) -> str
 - The once-per-session marker is `.trellis/.runtime/update-check-{safe_key}.marker`, where `safe_key` is the sanitized context key truncated to 160 chars. With no context key it falls back to `TERM_SESSION_ID`, then `ppid-{n}`. **That fallback is why the key must be threaded through**: `TERM_SESSION_ID` identifies a terminal *window*, so the marker would mute the reminder for every later session opened in the same window.
 - The marker is written before the version comparison, not after, so a probe that finds no update still costs one `trellis --version` per session rather than one per turn.
 - The whole path is best-effort. A missing scripts dir, an import error, or any exception while probing versions leaves the payload untouched (`session-start.py:341` catches bare `Exception` on purpose).
-- Scope is the shared hook only. Codex's own `session-start.py`, the OpenCode plugin, and the Pi extension build their own payloads and do not carry the rider.
+- Scope is the shared hook only. Codex's own `session-start.py` builds its own payload and does not carry the rider.
 
 #### 4. Validation & Error Matrix
 
@@ -1926,21 +1252,25 @@ One line inside the block that is already contracted to become spoken output; id
 
 ### Per-Platform Output Schema
 
-`shared-hooks/session-start.py` is consumed by hosts with **different sessionStart output schemas**. It must emit both shapes so every host reads the context it expects:
+`shared-hooks/session-start.py` emits both the nested camelCase shape and the
+top-level snake_case alias, because hosts differ in which one they read:
 
 ```python
 {
-    # Claude / Gemini / Qoder / CodeBuddy / Droid / Copilot — nested camelCase
+    # Nested camelCase — Claude Code
     "hookSpecificOutput": {
         "hookEventName": "SessionStart",
         "additionalContext": context_text,
     },
-    # Cursor — top-level snake_case per cursor.com/docs/agent/hooks
+    # Top-level snake_case alias for hosts that read this instead
     "additional_context": context_text,
 }
 ```
 
-Each host ignores keys it does not recognize, so dual emission is safe. **Do not refactor to single-format output** — dropping the Cursor key breaks Cursor's auto-context injection for all models (not just GPT). The same multi-format convention exists in `inject-subagent-context.py` (Cursor's `permission` + `updated_input` alongside Claude's `hookSpecificOutput`). ZCode is the exception: its PreToolUse hook should emit the live-tested nested `hookSpecificOutput.updatedInput` shape only, because ZCode's hook diagnostics describe strict stdout schemas.
+Each host ignores keys it does not recognize, so dual emission is safe. Keep both
+keys unless a host is verified to reject the alias — `inject-subagent-context.py`
+is the counter-example: it emits the single nested `hookSpecificOutput.updatedInput`
+shape, because that is the one Claude Code's PreToolUse contract defines.
 
 ### Constraint
 
@@ -2025,17 +1355,14 @@ A user prompt containing the skip keyword (default `no-trellis`) mutes the per-t
 breadcrumb for that turn only — the hook exits 0 with empty stdout before any task
 resolution or file reads. Contract:
 
-- Match rule (frozen, identical in Python hook and OpenCode plugin):
+- Match rule (frozen):
   case-insensitive `(?<![\w-])<keyword>(?![\w-])` — `no-trellisfoo`/`foo-no-trellis`
   do not match; `path/no-trellis.md` does (accepted false-positive).
 - Config: `.trellis/config.yaml` → `prompt_injection.skip_keyword`
   (ships commented; default in code via `common.config.get_prompt_injection_config()`;
   quoted `""` explicitly disables the hatch).
-- Scope: per-turn breadcrumb ONLY. `session-start.py`, `inject-subagent-context.py`,
-  and `inject-shell-session-context.py` must never gain keyword handling.
-- Coverage gap: the Pi extension cannot implement this — it has no `input` handler
-  (must not rewrite user text) and its `systemPrompt` must stay byte-identical per
-  turn for provider prefix caching.
+- Scope: per-turn breadcrumb ONLY. `session-start.py` and
+  `inject-subagent-context.py` must never gain keyword handling.
 - Dogfood copies to keep patched region-identically: `.claude/hooks/` and
   `.codex/hooks/` `inject-workflow-state.py`.
 
@@ -2088,38 +1415,19 @@ The same rule applies to every other hook that's positioned as "repeated reminde
 
 ### Platform Support Matrix
 
-| Platform        | Event                                                                                                 | Config File                                                                                                        | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code     | `UserPromptSubmit`                                                                                    | `.claude/settings.json`                                                                                            | Shared `inject-workflow-state.py`, distributed via `SHARED_HOOKS_BY_PLATFORM.claude`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Cursor          | ⚠️ Not supported                                                                                      | n/a                                                                                                                | Cursor's `beforeSubmitPrompt` schema accepts only `{continue, user_message}` — no context-injection field exists. Per-turn reminders rely on `sessionStart` only (one-shot at session begin). `inject-workflow-state.py` is not distributed to Cursor; see `SHARED_HOOKS_BY_PLATFORM.cursor` in `shared-hooks/index.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Qoder           | `UserPromptSubmit`                                                                                    | `.qoder/settings.json`                                                                                             | Auto                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| CodeBuddy       | `UserPromptSubmit`                                                                                    | `.codebuddy/settings.json`                                                                                         | Auto                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Droid (Factory) | `UserPromptSubmit`                                                                                    | `.factory/settings.json`                                                                                           | Auto                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Gemini CLI      | `UserPromptSubmit`                                                                                    | `.gemini/settings.json`                                                                                            | Auto                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Copilot CLI     | `userPromptSubmitted` (camelCase)                                                                     | `.github/copilot/hooks.json`                                                                                       | `bash` + `powershell` dual field                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Codex           | `UserPromptSubmit`                                                                                    | `.codex/hooks.json`                                                                                                | **Requires `features.hooks = true` in user's `~/.codex/config.toml` (Codex 0.129+; legacy: `codex_hooks = true`).** Codex 0.129+ also requires running `/hooks` once to approve the installed hook before it activates — until approved, hooks never fire (the trellis-bootstrap fallback in inject-workflow-state.py covers the gap by directing the AI to read `trellis-start` skill manually)                                                                                                                                                                                                                                                                                                                                                                                        |
-| OpenCode        | `chat.message` (Bun plugin)                                                                           | `plugins/inject-workflow-state.js`                                                                                 | Equivalent JS implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Kiro            | CLI: `userPromptSubmit` (main `trellis` agent JSON) · IDE: `promptSubmit` (`.kiro/hooks/*.kiro.hook`) | CLI: `.kiro/agents/trellis.json` `hooks` · IDE: `.kiro/hooks/trellis-workflow-state.kiro.hook` (`then.runCommand`) | Plain stdout (NOT the `hookSpecificOutput` JSON envelope) — Kiro adds a hook's raw stdout to conversation context. `inject-workflow-state.py` has a `platform == "kiro"` branch (detected via `KIRO_PROJECT_DIR` env or `.kiro` script path) that prints the bare breadcrumb. **Activation:** CLI users must make `trellis` the active agent (`kiro-cli settings chat.defaultAgent trellis` or `/agent swap trellis`) — Kiro defaults to built-in `kiro_default`. **Real-machine note:** the plain-stdout→context contract (and whether IDE `runCommand` stdout is injected vs only `askAgent`) is per official docs, pending Kiro hardware verification; fallback is `askAgent` + static steering. Sub-agent context injection unchanged via `agentSpawn → inject-subagent-context.py` |
-| Trae IDE        | `UserPromptSubmit`                                                                                    | `.trae/hooks.json`                                                                                                 | Auto; shared Python hook written under `.trae/hooks/inject-workflow-state.py`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ZCode           | `UserPromptSubmit`                                                                                    | `.zcode/config.json`                                                                                               | Shared Python hook under `.zcode/hooks/`. Hook config is read at session start with no hot-reload, so `configureZcode` prints a one-shot "open a new session" notice                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Snow CLI        | `onUserMessage`                                                                                       | `.snow/hooks/onUserMessage.json`                                                                                   | Platform-specific `write-trellis-context.py user` (not the shared hook) — Snow is absent from `SHARED_HOOKS_BY_PLATFORM` and bundles its own three inject hooks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Oh My Pi (OMP)  | extension turn hook                                                                                   | `.omp/extensions/trellis/`                                                                                         | TS extension resolves the breadcrumb per turn with its own cache; no Python hook                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Pi              | `before_agent_start` + `context`                                                                      | `.pi/extensions/trellis/index.ts`                                                                                  | TS port; `WF_RE` (`index.ts.txt:1072`) must match the Python `_TAG_RE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-
-**Deliberately absent** — these are not gaps to close:
-
-| Platform             | Why                                                                                                        |
-| -------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Cursor               | No context-injection field on `beforeSubmitPrompt` (row above)                                             |
-| Grok Build, Kimi Code | `hasHooks: false`. Grok 0.2.x was verified not to consume hook stdout `additionalContext`; both are class-2 pull-based |
-| Kilo, Antigravity, Devin | No hook surface and no sub-agents; they get commands + skills only                                     |
-| Reasonix             | Skill-only, no hook surface                                                                                |
+| Platform    | Event              | Config File             | Notes                                                                                                                                                                                                                                                                                                                        |
+| ----------- | ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code | `UserPromptSubmit` | `.claude/settings.json` | Shared `inject-workflow-state.py`, distributed via `SHARED_HOOKS_BY_PLATFORM.claude`                                                                                                                                                                                                                                         |
+| Codex       | `UserPromptSubmit` | `.codex/hooks.json`     | **Requires `features.hooks = true` in the user's `~/.codex/config.toml` (Codex 0.129+; legacy: `codex_hooks = true`).** Codex 0.129+ also requires running `/hooks` once to approve the installed hook before it activates — until approved, hooks never fire, and the trellis-bootstrap fallback in the hook covers the gap. |
 
 ### CWD Robustness
 
 The hook uses `find_trellis_root()` to walk up from CWD until it finds `.trellis/`, so it works when the terminal is in a subdirectory (monorepo package, etc.) or when sub-agent spawn inherits a drifted CWD.
 
-ZCode hook commands must also make the script path itself CWD-robust. Use the ZCode project-root placeholder in `.zcode/config.json`, for example `{{PYTHON_CMD}} "${ZCODE_PROJECT_DIR}/.zcode/hooks/inject-workflow-state.py"`, rather than `{{PYTHON_CMD}} .zcode/hooks/inject-workflow-state.py`. The Python hook's `find_trellis_root()` only runs after Python opens the script; a cwd-relative command can fail before the hook starts if ZCode launches from a nested directory such as `.github/docs/...`.
+A host that may launch from a nested directory needs the script path itself to be
+CWD-robust: prefer the host's project-root placeholder in the hook command over a
+cwd-relative path. The Python hook's `find_trellis_root()` only runs after Python
+opens the script, so a cwd-relative command can fail before the hook starts.
 
 ### Why No State Machine / No Extra `task.json` Fields
 
@@ -2210,12 +1518,6 @@ if (!hadDeveloperFileBefore) {
 
 **Fix**: Register with `{platform}: fromTemplates(collect{Platform}Templates)` in `src/configurators/index.ts`. That form cannot omit `collectTemplates` — it *is* `collectTemplates`.
 
-### Missing platform in cli_adapter.py
-
-**Symptom**: Python scripts fail with "Unsupported platform" error.
-
-**Fix**: Add platform to `Platform` literal type, `config_dir_name` property, and `get_cli_adapter()` validation in `cli_adapter.py`.
-
 ### Wrong command format in templates
 
 **Symptom**: Slash commands don't work or show wrong format.
@@ -2230,13 +1532,13 @@ if (!hadDeveloperFileBefore) {
 
 ### EXCLUDE_PATTERNS missing `.js` in configurator
 
-**Symptom**: In production builds (`dist/`), `trellis init` copies compiled `index.js` (and `.js.map`, `.d.ts`) into the user's config directory (e.g., `.gemini/index.js`).
+**Symptom**: In production builds (`dist/`), `trellis init` copies compiled `index.js` (and `.js.map`, `.d.ts`) into the user's config directory (e.g., `.codex/index.js`).
 
 **Cause**: The configurator walks its template directory and its `EXCLUDE_PATTERNS` doesn't filter out `.js` files. In development (`src/`), only `.ts` files exist so the issue is invisible. In production, `tsc` compiles `index.ts` → `index.js` into `dist/templates/{platform}/` and the walk picks it up.
 
-**Fix**: Ensure `EXCLUDE_PATTERNS` includes `.js`, `.js.map`, `.d.ts`, `.d.ts.map`. Only two configurators walk a directory today and both hold their own list: `claude.ts:22-28` and `opencode.ts:20-29`. Note they differ on purpose — OpenCode ships real `.js` plugin code, so it excludes `.js.map` and `.d.ts` but **not** `.js`.
+**Fix**: Ensure `EXCLUDE_PATTERNS` includes `.js`, `.js.map`, `.d.ts`, `.d.ts.map`. Only `claude.ts` walks a directory today and it holds its own list. A platform that ships real `.js` runtime code must keep `.js` out of its exclusions and drop only the build artifacts.
 
-**Prevention**: Prefer not walking a directory at all. A configurator that enumerates its files explicitly (`cursor.ts`, `droid.ts`, `snow.ts`) cannot pick up a build artifact, which is why it is the default shape. Walk only when the template tree is genuinely open-ended, and then copy the exclusion list from whichever of the two existing walkers matches your case.
+**Prevention**: Prefer not walking a directory at all. A configurator that enumerates its files explicitly (`codex.ts`) cannot pick up a build artifact, which is why it is the default shape. Walk only when the template tree is genuinely open-ended, and then copy the exclusion list from the existing walker.
 
 ### Missing CLI flag or InitOptions field
 
@@ -2250,7 +1552,7 @@ if (!hadDeveloperFileBefore) {
 
 **Cause**: `collect{Platform}Templates()` puts a raw template into the map without calling `resolvePlaceholders()`, so `{{PYTHON_CMD}}` survives into the written file and into the update comparison.
 
-**Fix**: Call `resolvePlaceholders()` at the point the entry is added to the map, e.g. `files.set(".cursor/hooks.json", resolvePlaceholders(getHooksConfig()))`. Because the map is now the single description, the placeholder resolves identically on both paths by construction — there is no second site to keep in sync.
+**Fix**: Call `resolvePlaceholders()` at the point the entry is added to the map, e.g. `files.set(".codex/hooks.json", resolvePlaceholders(getHooksConfig()))`. Because the map is now the single description, the placeholder resolves identically on both paths by construction — there is no second site to keep in sync.
 
 Note this is *only* about `{{…}}` placeholders. The separate `python3` → `python` literal rewrite is applied centrally by `renderTemplateMap` on both paths, so that half of this bug class is structurally closed.
 
@@ -2294,7 +1596,7 @@ Note this is *only* about `{{…}}` placeholders. The separate `python3` → `py
 
 **Symptom**: Implementation builds the wrong abstraction (e.g., commands instead of skills, or vice versa). Requires major rework after discovery.
 
-**Cause**: PRD was written based on assumptions about how a platform works (e.g., "Trae uses commands like Kilo") without verifying against official documentation or GitHub repos.
+**Cause**: PRD was written based on assumptions about how a platform works without verifying against official documentation or GitHub repos.
 
 **Fix**: Before writing the PRD for a new platform, research the platform's actual extension mechanism:
 
@@ -2314,15 +1616,15 @@ Note this is *only* about `{{…}}` placeholders. The separate `python3` → `py
 
 ### Stale platform references in copied templates
 
-**Symptom**: A Qoder skill references "Claude Code" syntax or a Kiro-specific invocation pattern.
+**Symptom**: A shared skill references "Claude Code" syntax or another platform-specific invocation pattern.
 
 **Cause**: When creating agent templates for a new platform by copying from an existing one, platform-specific references (command syntax, platform names, invocation instructions) weren't updated.
 
 **Fix**: After copying agent templates, search-and-replace all references to the source platform. Check for:
 
-- Platform name mentions (e.g., "Claude Code", "Kiro")
+- Platform name mentions (e.g., "Claude Code", "Codex")
 - Command invocation syntax (e.g., `/trellis:xxx` vs `$skill-name`)
-- Config directory references (e.g., `.claude/` vs `.qoder/`)
+- Config directory references (e.g., `.claude/` vs `.codex/`)
 
 ### Forgot to use shared hooks
 
@@ -2330,7 +1632,7 @@ Note this is *only* about `{{…}}` placeholders. The separate `python3` → `py
 
 **Cause**: When adding a new agent-capable platform, developer copied hook scripts from another platform's template directory instead of calling `collectSharedHooks(hooksDir, platform)` from `shared.ts`.
 
-**Fix**: Add the platform to `SHARED_HOOKS_BY_PLATFORM` with the hooks it can actually invoke, then use `collectSharedHooks()`. Only create platform-specific hook files when the platform has unique hook integration points (Codex and Copilot each bundle their own `session-start.py` for this reason).
+**Fix**: Add the platform to `SHARED_HOOKS_BY_PLATFORM` with the hooks it can actually invoke, then use `collectSharedHooks()`. Only create platform-specific hook files when the platform has unique hook integration points (Codex bundles its own `session-start.py` for this reason).
 
 **Prevention**: Declaring the platform in the table is only half the wiring — see "Declaring a shared hook is half the wiring" below.
 
@@ -2371,5 +1673,5 @@ Note this is *only* about `{{…}}` placeholders. The separate `python3` → `py
 | feat/gemini branch            | Gemini CLI       | Agents + shared hooks                          | First non-Markdown command format (TOML settings)                                              |
 | main                          | Antigravity      | Workflows + skills from `common/`              | No physical template dir — one `collectBothTemplates()` call; no Codex coupling                |
 | #71                           | Qoder            | Skills (like Codex/Kiro)                       | Skills with YAML frontmatter; Trae was dropped (IDE-only, no deterministic invocation trigger) |
-| feat/v0.5.0-beta              | All platforms (13 at the time; 21 today) | Unified template architecture | Common templates + shared hooks + `createTemplateReader()` factory                    |
+| feat/v0.5.0-beta              | All platforms (13 at the time; 2 today) | Unified template architecture | Common templates + shared hooks + `createTemplateReader()` factory                    |
 | `04-21-bootstrap-onboard-gap` | n/a              | Three-branch init dispatch + joiner onboarding | `.developer` file as per-checkout signal; documents the `handleReinit` two-point wiring        |

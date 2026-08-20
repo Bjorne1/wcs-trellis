@@ -321,7 +321,7 @@ Every non-trivial run creates `.trellis/.backup-<timestamp>/`. `BACKUP_EXCLUDE_P
 
 ### `node_modules/` under managed dirs
 
-OpenCode's plugin pattern installs npm dependencies under `.opencode/`. Without `/node_modules/` in `BACKUP_EXCLUDE_PATTERNS`, every backup would snapshot the entire dependency tree (`update.integration.test.ts > #27 backup skips managed node_modules dependency trees` regression-tests this). When adding a new platform that ships dependencies, verify the pattern still catches them; if the platform uses a non-standard path, extend `BACKUP_EXCLUDE_PATTERNS`.
+A platform whose integration installs npm dependencies under its config dir needs `/node_modules/` in `BACKUP_EXCLUDE_PATTERNS`; without it, every backup would snapshot the entire dependency tree (`update.integration.test.ts > #27 backup skips managed node_modules dependency trees` regression-tests this). When adding a new platform that ships dependencies, verify the pattern still catches them; if the platform uses a non-standard path, extend `BACKUP_EXCLUDE_PATTERNS`.
 
 ### `.developer` raw-trim foot-gun
 
@@ -343,7 +343,7 @@ Symptom: every `trellis update` shows the same hooks/settings file as auto-updat
 Two failure modes here:
 
 1. The file was written before hash tracking existed for that path (legacy install). Solution for AGENTS.md is `LEGACY_UNTRACKED_AGENTS_MD_BLOCK_HASHES`. Adding the same escape hatch for other paths is acceptable but should be a last resort — the proper fix is to backfill hashes.
-2. Two writers produced byte-different content for the same path. The classic case: `.agents/skills/<skill>/SKILL.md` written by both Codex and Gemini configurators with platform-specific `{{CMD_REF:name}}` resolution. Fix: use `configurators/shared.ts:resolvePlaceholdersNeutral` for shared destinations. See `platform-integration.md > "Rule: .agents/skills/ writes use resolvePlaceholdersNeutral()"`.
+2. Two writers produced byte-different content for the same path. The classic case: `.agents/skills/<skill>/SKILL.md` written by two configurators with platform-specific `{{CMD_REF:name}}` resolution. Fix: use `configurators/shared.ts:resolvePlaceholdersNeutral` for shared destinations. See `platform-integration.md > "Rule: .agents/skills/ writes use resolvePlaceholdersNeutral()"`.
 
 ### `--allow-downgrade` is a foot-gun
 
@@ -351,13 +351,13 @@ Migrations are forward-only. A user who downgrades while staying on the same maj
 
 ### Codex two-layer upgrade
 
-Old Trellis used `.agents/skills/` as the Codex configDir; current Trellis uses `.codex/` plus a shared `.agents/skills/` layer. `commands/update.ts:needsCodexUpgrade` detects the legacy state by looking for command-as-skill marker entries (`trellis-continue/SKILL.md`, `trellis-finish-work/SKILL.md`) in the hash file, then excludes any configured non-Codex platform whose current template collector declares those same marker paths. Current non-Codex platforms with a private command surface, such as ZCode, must not declare those marker paths under `.agents/skills`; this keeps combined installs from producing hash churn and keeps the Codex legacy detector unambiguous. When legacy Codex is detected, `update()` injects `codex` into `extraPlatforms` so `collectTemplateFiles` produces the missing `.codex/` files.
+Old Trellis used `.agents/skills/` as the Codex configDir; current Trellis uses `.codex/` plus a shared `.agents/skills/` layer. `commands/update.ts:needsCodexUpgrade` detects the legacy state by looking for command-as-skill marker entries (`trellis-continue/SKILL.md`, `trellis-finish-work/SKILL.md`) in the hash file, then excludes any configured non-Codex platform whose current template collector declares those same marker paths. A non-Codex platform with a private command surface must not declare those marker paths under `.agents/skills`; this keeps combined installs from producing hash churn and keeps the Codex legacy detector unambiguous. When legacy Codex is detected, `update()` injects `codex` into `extraPlatforms` so `collectTemplateFiles` produces the missing `.codex/` files.
 
 General platform detection also uses template hashes, but with a stricter
 ownership intersection: a platform counts only when the manifest contains a
 path declared by that platform's current `collectTemplates()` output and the
 path is under its private `configDir`. Shared `.agents/skills/` entries cannot
-activate Codex, Gemini, Pi, or Kimi, and native platform directories cannot
+activate Codex, and native platform directories cannot
 activate themselves. Keep both filters; dropping either one can create bogus
 platform detections and unsafe update/uninstall plans.
 

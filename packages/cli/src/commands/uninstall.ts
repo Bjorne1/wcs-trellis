@@ -4,7 +4,7 @@
  *
  * The single source of truth for "what trellis wrote" is
  * `.trellis/.template-hashes.json`. Files outside that manifest are never
- * touched (e.g. user-added hooks under `.cursor/hooks/`).
+ * touched (e.g. user-added hooks under `.claude/hooks/`).
  *
  * Manifest-listed files split into two groups:
  *   A. Opaque content files (`.py` / `.md` / `.ts` / etc.) — unlinked outright.
@@ -43,17 +43,10 @@ import {
 } from "../utils/cwd-guard.js";
 import {
   scrubHooksJson,
-  scrubOpencodePackageJson,
-  scrubPiSettings,
   scrubCodexConfigToml,
   scrubManagedMarkdownBlock,
   type ScrubResult,
 } from "../utils/uninstall-scrubbers.js";
-import {
-  COPILOT_INSTRUCTIONS_BLOCK_END,
-  COPILOT_INSTRUCTIONS_BLOCK_START,
-  COPILOT_INSTRUCTIONS_PATH,
-} from "../templates/copilot/index.js";
 
 export interface UninstallOptions {
   yes?: boolean;
@@ -82,58 +75,17 @@ interface StructuredFileSpec {
 function buildStructuredFileSpecs(): Map<string, StructuredFileSpec> {
   const specs: StructuredFileSpec[] = [
     // Nested hooks.{Event}.[].hooks.[] schema
-    ...(
-      [
-        ".claude/settings.json",
-        ".gemini/settings.json",
-        ".factory/settings.json",
-        ".codebuddy/settings.json",
-        ".qoder/settings.json",
-        ".codex/hooks.json",
-        ".trae/hooks.json",
-      ] as const
-    ).map(
+    ...([".claude/settings.json", ".codex/hooks.json"] as const).map(
       (p): StructuredFileSpec => ({
         posixPath: p,
         reason: "Strip trellis hooks; preserve user fields",
-        scrub: (content, deletedPaths) =>
-          scrubHooksJson(content, deletedPaths, "nested"),
+        scrub: (content, deletedPaths) => scrubHooksJson(content, deletedPaths),
       }),
     ),
-    // Flat hooks.{Event}.[] schema
-    ...([".cursor/hooks.json", ".github/copilot/hooks.json"] as const).map(
-      (p): StructuredFileSpec => ({
-        posixPath: p,
-        reason: "Strip trellis hooks; preserve user fields",
-        scrub: (content, deletedPaths) =>
-          scrubHooksJson(content, deletedPaths, "flat"),
-      }),
-    ),
-    {
-      posixPath: ".opencode/package.json",
-      reason: "Remove @opencode-ai/plugin dep; preserve other deps",
-      scrub: (content) => scrubOpencodePackageJson(content),
-    },
-    {
-      posixPath: ".pi/settings.json",
-      reason:
-        "Strip trellis extension/skills/prompts entries; preserve user fields",
-      scrub: (content) => scrubPiSettings(content),
-    },
     {
       posixPath: ".codex/config.toml",
       reason: "Remove trellis project_doc_fallback_filenames and notes",
       scrub: (content) => scrubCodexConfigToml(content),
-    },
-    {
-      posixPath: COPILOT_INSTRUCTIONS_PATH,
-      reason: "Remove Trellis Copilot guidance; preserve repo instructions",
-      scrub: (content) =>
-        scrubManagedMarkdownBlock(
-          content,
-          COPILOT_INSTRUCTIONS_BLOCK_START,
-          COPILOT_INSTRUCTIONS_BLOCK_END,
-        ),
     },
     {
       // AGENTS.md is a mixed-ownership file: Trellis owns the

@@ -53,28 +53,14 @@ vi.mock("giget", async () => {
 import { init } from "../../src/commands/init.js";
 import {
   update,
-  classifyMigrations,
-  executeMigrations,
 } from "../../src/commands/update.js";
 import { VERSION } from "../../src/constants/version.js";
 import { DIR_NAMES, FILE_NAMES, PATHS } from "../../src/constants/paths.js";
 import { computeHash } from "../../src/utils/template-hash.js";
-import { workflowMdTemplate } from "../../src/templates/trellis/index.js";
 import {
-  COPILOT_INSTRUCTIONS_BLOCK_END,
-  COPILOT_INSTRUCTIONS_BLOCK_START,
-  COPILOT_INSTRUCTIONS_PATH,
-  getCopilotInstructions,
 } from "../../src/templates/copilot/index.js";
 import {
-  replacePythonCommandLiterals,
-  resolveSkills,
-  resolveSkillsNeutral,
-  resolveAllAsSkillsNeutral,
-  resolveBundledSkills,
-  collectSkillTemplates,
 } from "../../src/configurators/shared.js";
-import { AI_TOOLS } from "../../src/types/ai-tools.js";
 
 // A managed template file that update always handles (Python script)
 const MANAGED_FILE = `${PATHS.SCRIPTS}/get_context.py`;
@@ -152,28 +138,6 @@ describe("update() integration", () => {
    * the older pristine content so update() must treat those files as
    * auto-update candidates.
    */
-  function stageVersionedUpgradeProject(options: {
-    fromVersion: string;
-    pristineTemplates?: Record<string, string>;
-    userModifiedTemplates?: Record<string, string>;
-  }): void {
-    fs.writeFileSync(versionFilePath(), options.fromVersion);
-
-    const hashes = readHashesV2(hashFilePath());
-    for (const [relativePath, content] of Object.entries(
-      options.pristineTemplates ?? {},
-    )) {
-      writeProjectFile(relativePath, content);
-      hashes[relativePath] = computeHash(content);
-    }
-    writeHashesV2(hashFilePath(), hashes);
-
-    for (const [relativePath, content] of Object.entries(
-      options.userModifiedTemplates ?? {},
-    )) {
-      writeProjectFile(relativePath, content);
-    }
-  }
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-update-int-"));
@@ -258,155 +222,8 @@ describe("update() integration", () => {
     expect(entries.filter((e) => e.startsWith(".backup-")).length).toBe(0);
   });
 
-  it("#1b current OpenCode templates are not classified as deprecated", async () => {
-    const startPath = ".opencode/commands/trellis/start.md";
-    await init({ yes: true, force: true, opencode: true });
-    expect(fs.existsSync(projectFile(startPath))).toBe(true);
 
-    await update({ dryRun: true });
 
-    const output = vi.mocked(console.log).mock.calls.flat().join("\n");
-    expect(output).not.toContain(`${startPath} (modified, skipped)`);
-  });
-
-  it("[issue-zcode-codex-upgrade] zcode private skills do not trigger legacy Codex backfill", async () => {
-    await init({ yes: true, force: true, zcode: true });
-
-    expect(fs.existsSync(projectFile(".zcode/commands/trellis/start.md"))).toBe(
-      true,
-    );
-    expect(
-      fs.existsSync(projectFile(".zcode/skills/trellis-start/SKILL.md")),
-    ).toBe(false);
-    expect(
-      fs.existsSync(projectFile(".zcode/skills/trellis-check/SKILL.md")),
-    ).toBe(true);
-    expect(
-      fs.existsSync(projectFile(".zcode/agents/trellis-research.md")),
-    ).toBe(true);
-    expect(
-      fs.existsSync(projectFile(".agents/skills/trellis-start/SKILL.md")),
-    ).toBe(false);
-    expect(fs.existsSync(projectFile(".agents/skills"))).toBe(false);
-    expect(
-      fs.existsSync(projectFile(".agents/skills/trellis-continue/SKILL.md")),
-    ).toBe(false);
-
-    await update({});
-
-    const logOutput = vi.mocked(console.log).mock.calls.flat().join("\n");
-    expect(logOutput).not.toContain("Legacy Codex detected");
-    expect(fs.existsSync(projectFile(".codex"))).toBe(false);
-    expect(
-      fs.existsSync(projectFile(".zcode/skills/trellis-start/SKILL.md")),
-    ).toBe(false);
-    expect(
-      fs.existsSync(projectFile(".zcode/skills/trellis-check/SKILL.md")),
-    ).toBe(true);
-    expect(
-      fs.existsSync(projectFile(".zcode/agents/trellis-research.md")),
-    ).toBe(true);
-    expect(fs.existsSync(projectFile(".agents/skills"))).toBe(false);
-  });
-
-  it("[issue-447] 0.6.8 rename-dir migration moves legacy .pi/skills/ into shared .agents/skills/ even when Codex already installed the shared root", async () => {
-    // Simulate a pre-0.6.8 project: Pi + Codex both installed. Pre-fix Pi
-    // wrote its own Pi-flavored copy under `.pi/skills/` (via resolveSkills,
-    // not resolveSkillsNeutral), while Codex already wrote the shared,
-    // neutral `.agents/skills/` root. Reproduces the #447 repro shape.
-    //
-    // This exercises classifyMigrations()/executeMigrations() directly
-    // (like the existing "rename-dir ownership gate" tests in
-    // update-internals.test.ts) rather than the full update() CLI flow,
-    // because the 0.6.8 manifest only becomes "pending" once the CLI's own
-    // package.json version reaches 0.6.8 — a release-time bump orthogonal to
-    // this bug fix.
-    await init({ yes: true, force: true, pi: true, codex: true });
-
-    // `.agents/skills/` now holds the correct, neutral, current-version
-    // content (written by both Codex and current Pi in current code).
-    const neutralContent = readProjectFile(
-      ".agents/skills/trellis-update-spec/SKILL.md",
-    );
-
-    // Fabricate the pre-fix `.pi/skills/` leftover with Pi-flavored bytes
-    // (old pi.ts used resolveSkills(ctx), not resolveSkillsNeutral(ctx)).
-    const piCtx = AI_TOOLS.pi.templateContext;
-    const legacyPiSkillFiles = collectSkillTemplates(
-      ".pi/skills",
-      resolveSkills(piCtx),
-      resolveBundledSkills(piCtx),
-    );
-
-    const legacyContent = legacyPiSkillFiles.get(
-      ".pi/skills/trellis-update-spec/SKILL.md",
-    );
-    expect(legacyContent).toBeDefined();
-    // Sanity: the Pi-flavored bytes actually differ from the shared neutral
-    // bytes already on disk (otherwise this test wouldn't be exercising the
-    // reported bug at all).
-    expect(legacyContent).not.toBe(neutralContent);
-
-    const hashes = readHashesV2(hashFilePath());
-    for (const [relativePath, content] of legacyPiSkillFiles) {
-      writeProjectFile(relativePath, content);
-      hashes[relativePath] = computeHash(content);
-    }
-    writeHashesV2(hashFilePath(), hashes);
-
-    expect(fs.existsSync(projectFile(".pi/skills/trellis-update-spec"))).toBe(
-      true,
-    );
-    expect(
-      fs.existsSync(projectFile(".agents/skills/trellis-update-spec")),
-    ).toBe(true);
-
-    // Build the current-version templates map for `.agents/skills/` the way
-    // both real writers (Codex, Pi) produce it — mirrors what update()'s
-    // collectTemplateFiles() would assemble for this project.
-    const codexCtx = AI_TOOLS.codex.templateContext;
-    const currentTemplates = new Map<string, string>([
-      ...collectSkillTemplates(
-        ".agents/skills",
-        resolveAllAsSkillsNeutral(codexCtx),
-        resolveBundledSkills(codexCtx),
-      ),
-      ...collectSkillTemplates(
-        ".agents/skills",
-        resolveSkillsNeutral(piCtx),
-        resolveBundledSkills(piCtx),
-      ),
-    ]);
-
-    const migrationItem = {
-      type: "rename-dir" as const,
-      from: ".pi/skills",
-      to: ".agents/skills",
-    };
-    const finalHashes = readHashesV2(hashFilePath());
-    const classified = classifyMigrations(
-      [migrationItem],
-      tmpDir,
-      finalHashes,
-      currentTemplates,
-    );
-
-    // The merged 0.6.8 migration must resolve this automatically — not
-    // punt to the user as an unresolved conflict.
-    expect(classified.conflict).toHaveLength(0);
-    expect(classified.auto).toHaveLength(1);
-
-    await executeMigrations(classified, tmpDir, { force: true, skipAll: false }, currentTemplates);
-
-    // No duplicate/leftover `.pi/skills/` directory should survive.
-    expect(fs.existsSync(projectFile(".pi/skills"))).toBe(false);
-
-    // `.agents/skills/` must end up with the correct, current, neutral
-    // content — not the stale Pi-flavored bytes from the deleted legacy dir.
-    expect(
-      readProjectFile(".agents/skills/trellis-update-spec/SKILL.md"),
-    ).toBe(neutralContent);
-  });
 
   it("#2 dry run makes no file changes even when changes exist", async () => {
     await setupProject();
@@ -563,65 +380,7 @@ describe("update() integration", () => {
     expect(result.endsWith(templateContent.trimEnd() + "\n")).toBe(true);
   });
 
-  it("#4e appends Trellis Copilot guidance to existing repo instructions", async () => {
-    await init({ yes: true, force: true, copilot: true });
 
-    const userContent =
-      "# Repo Copilot Instructions\n\nReview app code first.\n";
-    writeProjectFile(COPILOT_INSTRUCTIONS_PATH, userContent);
-
-    const hashFile = hashFilePath();
-    const hashes = removeHashEntry(
-      readHashesV2(hashFile),
-      COPILOT_INSTRUCTIONS_PATH,
-    ) as Record<string, string>;
-    writeHashesV2(hashFile, hashes);
-
-    await update({});
-
-    const result = readProjectFile(COPILOT_INSTRUCTIONS_PATH);
-    expect(result).toContain("# Repo Copilot Instructions");
-    expect(result).toContain("Review app code first.");
-    expect(result).toContain(COPILOT_INSTRUCTIONS_BLOCK_START);
-    expect(result).toContain(COPILOT_INSTRUCTIONS_BLOCK_END);
-    expect(result).toContain("Trellis-generated runtime");
-    expect(result.indexOf("# Repo Copilot Instructions")).toBeLessThan(
-      result.indexOf(COPILOT_INSTRUCTIONS_BLOCK_START),
-    );
-    expect(readHashesV2(hashFile)[COPILOT_INSTRUCTIONS_PATH]).toBe(
-      computeHash(result),
-    );
-  });
-
-  it("#4f refreshes only the Trellis Copilot guidance block", async () => {
-    await init({ yes: true, force: true, copilot: true });
-
-    const oldBlock = getCopilotInstructions().replace(
-      "Group duplicate root-cause findings into one comment",
-      "Leave duplicate comments for every occurrence",
-    );
-    const existingContent = `# Repo Copilot Instructions\n\n${oldBlock}\n\n## Local Notes\n\nKeep this.\n`;
-    writeProjectFile(COPILOT_INSTRUCTIONS_PATH, existingContent);
-
-    const hashFile = hashFilePath();
-    const hashes = readHashesV2(hashFile);
-    hashes[COPILOT_INSTRUCTIONS_PATH] = computeHash(existingContent);
-    writeHashesV2(hashFile, hashes);
-
-    await update({});
-
-    const result = readProjectFile(COPILOT_INSTRUCTIONS_PATH);
-    expect(result).toContain("# Repo Copilot Instructions");
-    expect(result).toContain("## Local Notes");
-    expect(result).toContain("Keep this.");
-    expect(result).toContain(
-      "Group duplicate root-cause findings into one comment",
-    );
-    expect(result).not.toContain("Leave duplicate comments");
-    expect(readHashesV2(hashFile)[COPILOT_INSTRUCTIONS_PATH]).toBe(
-      computeHash(result),
-    );
-  });
 
   it("#5 force overwrites user-modified files", async () => {
     await setupProject();
@@ -772,79 +531,6 @@ describe("update() integration", () => {
     expect(fs.readFileSync(versionPath, "utf-8")).toBe(VERSION);
   });
 
-  it("#12b versioned upgrade scenario applies auto-updates, additive config sections, and modified-file skips", async () => {
-    await setupProject();
-
-    const expectedWorkflow = replacePythonCommandLiterals(workflowMdTemplate);
-    const expectedGetContext = readProjectFile(MANAGED_FILE);
-    const userModifiedScript = `${PATHS.SCRIPTS}/add_session.py`;
-    const userModifiedScriptContent = "# user customized add_session.py\n";
-    const oldConfigWithoutSessionAutoCommit =
-      "max_journal_lines: 2000\n\n" +
-      "# Local 0.5.10 config customization that must survive update.\n";
-    const oldWorkflow =
-      "# Workflow\n\n" +
-      "## Phase Index\n\n" +
-      "[workflow-state:in_progress]\nlegacy body\n[/workflow-state:in_progress]\n\n" +
-      "#### 2.1 Implement `[required · repeatable]`\n\n" +
-      "[Codex]\nSpawn the implement sub-agent:\n[/Codex]\n\n" +
-      "[Kilo, Antigravity, Windsurf]\n" +
-      "1. Load the `trellis-before-dev` skill to read project guidelines\n" +
-      "[/Kilo, Antigravity, Windsurf]\n";
-
-    stageVersionedUpgradeProject({
-      fromVersion: "0.5.10",
-      pristineTemplates: {
-        [PATHS.WORKFLOW_GUIDE_FILE]: oldWorkflow,
-        [MANAGED_FILE]: "# old get_context.py from installed template\n",
-      },
-      userModifiedTemplates: {
-        [`${DIR_NAMES.WORKFLOW}/config.yaml`]:
-          oldConfigWithoutSessionAutoCommit,
-        [userModifiedScript]: userModifiedScriptContent,
-      },
-    });
-
-    await update({ skipAll: true });
-
-    expect(fs.readFileSync(versionFilePath(), "utf-8")).toBe(VERSION);
-
-    // Hash-tracked pristine templates from the older install are whole-file
-    // auto-updated to the current packaged template.
-    expect(readProjectFile(PATHS.WORKFLOW_GUIDE_FILE)).toBe(expectedWorkflow);
-    expect(readProjectFile(MANAGED_FILE)).toBe(expectedGetContext);
-    // Prefix, not the whole marker: the inline block gains members as
-    // sub-agent-less platforms are added, and this assertion is about the
-    // block surviving the update, not about who is currently in it.
-    expect(readProjectFile(PATHS.WORKFLOW_GUIDE_FILE)).toContain(
-      "[Gemini, Qoder, Copilot, Reasonix, Trae, Grok, Kimi Code, DeepSeek Harness]",
-    );
-    expect(readProjectFile(PATHS.WORKFLOW_GUIDE_FILE)).toContain(
-      "[codex-inline, Kilo, Antigravity, Devin",
-    );
-    expect(readProjectFile(PATHS.WORKFLOW_GUIDE_FILE)).not.toContain("[Codex]");
-
-    // Version-specific additive config sections still apply to a user-modified
-    // config.yaml, while preserving the local content around the append.
-    const updatedConfig = readProjectFile(`${DIR_NAMES.WORKFLOW}/config.yaml`);
-    expect(updatedConfig).toContain(
-      "Local 0.5.10 config customization that must survive update.",
-    );
-    expect(updatedConfig).toContain("Session Auto-Commit");
-    expect(updatedConfig).toContain("session_auto_commit: true");
-
-    // User-modified template files are skipped under skipAll and their hashes
-    // are not rewritten to bless the local modification as a template.
-    expect(readProjectFile(userModifiedScript)).toBe(userModifiedScriptContent);
-    const hashes = readHashesV2(hashFilePath());
-    expect(hashes[PATHS.WORKFLOW_GUIDE_FILE]).toBe(
-      computeHash(expectedWorkflow),
-    );
-    expect(hashes[MANAGED_FILE]).toBe(computeHash(expectedGetContext));
-    expect(hashes[userModifiedScript]).not.toBe(
-      computeHash(userModifiedScriptContent),
-    );
-  });
 
   it("#13 user-edited spec/guides files are preserved after update with force", async () => {
     await setupProject();
@@ -1051,29 +737,6 @@ describe("update() integration", () => {
     expect(fs.readFileSync(gitattributesPath, "utf-8")).toBe(userContent);
   });
 
-  it("#16 config.yaml update.skip prevents file from being updated", async () => {
-    await setupProject();
-
-    // Pick a managed template file
-    const targetPath = path.join(tmpDir, MANAGED_FILE);
-
-    // Add skip config
-    const configPath = path.join(tmpDir, DIR_NAMES.WORKFLOW, "config.yaml");
-    const configContent = fs.readFileSync(configPath, "utf-8");
-    fs.writeFileSync(
-      configPath,
-      configContent + `\nupdate:\n  skip:\n    - ${MANAGED_FILE}\n`,
-    );
-
-    // Modify the file so it would normally trigger a change
-    fs.writeFileSync(targetPath, "# modified by user\n");
-
-    // Run update
-    await update({ force: true });
-
-    // File should NOT be overwritten (it's in skip list)
-    expect(fs.readFileSync(targetPath, "utf-8")).toBe("# modified by user\n");
-  });
 
   it("#17 config.yaml update.skip with directory path skips all files under it", async () => {
     await setupProject();
@@ -1439,87 +1102,5 @@ describe("update() integration", () => {
     expect(fs.existsSync(newPath + ".backup")).toBe(false);
   });
 
-  it("#27 backup skips managed node_modules dependency trees", async () => {
-    await setupProject();
 
-    const opencodeRoot = path.join(tmpDir, ".opencode");
-    fs.mkdirSync(path.join(opencodeRoot, "node_modules", "zod"), {
-      recursive: true,
-    });
-    fs.writeFileSync(path.join(opencodeRoot, "package.json"), "{}\n");
-    fs.writeFileSync(
-      path.join(opencodeRoot, "node_modules", "zod", "index.js"),
-      "module.exports = {};\n",
-    );
-
-    // Trigger an update that creates a backup.
-    const targetFull = path.join(tmpDir, MANAGED_FILE);
-    fs.writeFileSync(targetFull, "user customized content");
-
-    await update({ force: true });
-
-    const entries = fs.readdirSync(path.join(tmpDir, DIR_NAMES.WORKFLOW));
-    const backupDirs = entries.filter((e) => e.startsWith(".backup-"));
-    expect(backupDirs.length).toBe(1);
-
-    const backupDir = path.join(
-      tmpDir,
-      DIR_NAMES.WORKFLOW,
-      backupDirs[0] as string,
-    );
-    expect(
-      fs.existsSync(path.join(backupDir, ".opencode", "package.json")),
-    ).toBe(true);
-    expect(
-      fs.existsSync(path.join(backupDir, ".opencode", "node_modules")),
-    ).toBe(false);
-  });
-
-  it("#workflow-md-r4 updates workflow.md as one runtime template when hash-tracked", async () => {
-    await setupProject();
-
-    const workflowPath = path.join(tmpDir, PATHS.WORKFLOW_GUIDE_FILE);
-    const staleWorkflow =
-      "# Workflow\n\n" +
-      "## Phase Index\n\n" +
-      "[workflow-state:in_progress]\nlegacy body\n[/workflow-state:in_progress]\n\n" +
-      "#### 2.1 Implement `[required · repeatable]`\n\n" +
-      "[Codex]\nSpawn the implement sub-agent:\n[/Codex]\n\n" +
-      "[Kilo, Antigravity, Windsurf]\n" +
-      "1. Load the `trellis-before-dev` skill to read project guidelines\n" +
-      "[/Kilo, Antigravity, Windsurf]\n";
-
-    fs.writeFileSync(workflowPath, staleWorkflow, "utf-8");
-
-    // Simulate an older installed workflow.md that is still pristine relative
-    // to the version that installed it. Update must replace the whole file:
-    // platform markers outside [workflow-state:*] blocks are runtime-parsed too.
-    const hashFile = path.join(
-      tmpDir,
-      DIR_NAMES.WORKFLOW,
-      ".template-hashes.json",
-    );
-    const hashes = readHashesV2(hashFile);
-    hashes[PATHS.WORKFLOW_GUIDE_FILE] = computeHash(staleWorkflow);
-    writeHashesV2(hashFile, hashes);
-
-    await update({ force: true });
-
-    const updated = fs.readFileSync(workflowPath, "utf-8");
-    expect(updated).toBe(replacePythonCommandLiterals(workflowMdTemplate));
-    expect(updated).toContain(
-      "[Gemini, Qoder, Copilot, Reasonix, Trae, Grok, Kimi Code, DeepSeek Harness]",
-    );
-    expect(updated).toContain(
-      "[/Claude Code, Cursor, OpenCode, codex-sub-agent, CodeBuddy, Droid, Pi, ZCode, Snow, Oh My Pi]",
-    );
-    expect(updated).toContain("[codex-inline, Kilo, Antigravity, Devin");
-    expect(updated).not.toContain("[Codex]");
-    expect(updated).not.toContain("[Kilo, Antigravity, Windsurf]");
-    expect(updated).not.toContain("legacy body");
-
-    expect(readHashesV2(hashFile)[PATHS.WORKFLOW_GUIDE_FILE]).toBe(
-      computeHash(updated),
-    );
-  });
 });

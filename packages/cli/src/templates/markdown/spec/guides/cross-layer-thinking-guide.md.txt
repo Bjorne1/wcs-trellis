@@ -131,10 +131,9 @@ In Trellis, command templates (e.g., `record-session.md`) exist in **multiple pl
 
 - [ ] Find all platforms with the same command: `find src/templates/*/commands/trellis/ -name "<command>.*"`
 - [ ] Update all platform copies (Markdown `.md` and TOML `.toml`)
-- [ ] For Gemini TOML: adapt line continuations (`\\` vs `\`) and triple-quoted strings
 - [ ] Run `/trellis:check-cross-layer` to verify nothing was missed
 
-**Real-world example**: Updated `record-session.md` in Claude to use `--mode record`, but forgot iFlow, Kilo, OpenCode, and Gemini — caught by cross-layer check.
+**Real-world example**: Updated `record-session.md` for Claude Code to use `--mode record`, but forgot the Codex copy — caught by cross-layer check.
 
 ---
 
@@ -185,8 +184,7 @@ release docs, move the 0.6 content to `beta/` and `zh/beta/`, and add a grep
 audit for beta markers against the root release tree.
 
 **Real-world example**: Codex inline mode changed workflow platform markers from
-`[Codex]` / `[Kilo, Antigravity, Windsurf]` to `[codex-sub-agent]` /
-`[codex-inline, Kilo, Antigravity, Windsurf]`. Fresh init was correct, but
+`[Codex]` to `[codex-sub-agent]` / `[codex-inline]`. Fresh init was correct, but
 `trellis update` only merged `[workflow-state:*]` blocks and preserved stale
 markers outside those blocks. Result: upgraded projects got new hook scripts
 but old workflow routing, so `get_context.py --mode phase --platform codex`
@@ -228,10 +226,9 @@ In Trellis, command templates (e.g., `record-session.md`) exist in **multiple pl
 
 - [ ] Find all platforms with the same command: `find src/templates/*/commands/trellis/ -name "<command>.*"`
 - [ ] Update all platform copies (Markdown `.md` and TOML `.toml`)
-- [ ] For Gemini TOML: adapt line continuations (`\\` vs `\`) and triple-quoted strings
 - [ ] Run `/trellis:check-cross-layer` to verify nothing was missed
 
-**Real-world example**: Updated `record-session.md` in Claude to use `--mode record`, but forgot iFlow, Kilo, OpenCode, and Gemini — caught by cross-layer check.
+**Real-world example**: Updated `record-session.md` for Claude Code to use `--mode record`, but forgot the Codex copy — caught by cross-layer check.
 
 ---
 
@@ -255,8 +252,7 @@ against both fresh init and upgrade paths.
 - [ ] Update the backend spec that owns the runtime contract
 
 **Real-world example**: Codex inline mode changed workflow platform markers from
-`[Codex]` / `[Kilo, Antigravity, Windsurf]` to `[codex-sub-agent]` /
-`[codex-inline, Kilo, Antigravity, Windsurf]`. Fresh init was correct, but
+`[Codex]` to `[codex-sub-agent]` / `[codex-inline]`. Fresh init was correct, but
 `trellis update` only merged `[workflow-state:*]` blocks and preserved stale
 markers outside those blocks. Result: upgraded projects got new hook scripts
 but old workflow routing, so `get_context.py --mode phase --platform codex`

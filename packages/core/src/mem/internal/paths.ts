@@ -13,43 +13,6 @@ import * as path from "node:path";
 export const HOME = os.homedir();
 export const CLAUDE_PROJECTS = path.join(HOME, ".claude", "projects");
 export const CODEX_SESSIONS = path.join(HOME, ".codex", "sessions");
-/** ZCode (Zhipu) persisted-session SQLite store. The companion `-wal` file is
- * auto-detected by the readonly parser. */
-export const ZCODE_DB = path.join(HOME, ".zcode", "cli", "db", "db.sqlite");
-/** Grok CLI session root: `<cwd url-encoded>/<session-id>/chat_history.jsonl`.
- * The sibling `session_search.sqlite` is a search index only and is not read —
- * this adapter needs no database and adds no dependency. */
-export const GROK_SESSIONS = path.join(HOME, ".grok", "sessions");
-
-function expandHome(p: string): string {
-  if (p === "~") return HOME;
-  if (p.startsWith(`~${path.sep}`)) return path.join(HOME, p.slice(2));
-  if (p.startsWith("~/")) return path.join(HOME, p.slice(2));
-  return p;
-}
-
-export const PI_AGENT_DIR = expandHome(
-  process.env.PI_CODING_AGENT_DIR ?? path.join(HOME, ".pi", "agent"),
-);
-export const PI_SESSIONS = expandHome(
-  process.env.PI_CODING_AGENT_SESSION_DIR ??
-    path.join(PI_AGENT_DIR, "sessions"),
-);
-
-function readPiSettingsSessionDir(settingsFile: string): string | undefined {
-  try {
-    const raw: unknown = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-    const sessionDir = (raw as { sessionDir?: unknown }).sessionDir;
-    if (typeof sessionDir !== "string" || !sessionDir.trim()) return undefined;
-    const expanded = expandHome(sessionDir);
-    return path.isAbsolute(expanded)
-      ? expanded
-      : path.resolve(path.dirname(settingsFile), expanded);
-  } catch {
-    return undefined;
-  }
-}
 
 /** Claude sanitizes a cwd into its on-disk project dir name by replacing
  * every path separator (`/` and Windows `\`), drive colon (`:`), `_`, and `.`
@@ -57,54 +20,6 @@ function readPiSettingsSessionDir(settingsFile: string): string | undefined {
  * `/Users/x/.codex/...` → `-Users-x--codex-...`, `snap_note` → `snap-note`. */
 export function claudeProjectDirFromCwd(cwd: string): string {
   return path.join(CLAUDE_PROJECTS, cwd.replace(/[/\\:_.]/g, "-"));
-}
-
-/** Grok names each project dir with the URL-encoded absolute cwd, e.g.
- * `/Users/x/proj` → `%2FUsers%2Fx%2Fproj`. */
-export function grokProjectDirFromCwd(cwd: string): string {
-  return path.join(GROK_SESSIONS, encodeURIComponent(path.resolve(cwd)));
-}
-
-/** Inverse of {@link grokProjectDirFromCwd}. Returns `undefined` when the name
- * is not valid percent-encoding rather than throwing on a stray `%`. */
-export function grokCwdFromProjectDir(dirName: string): string | undefined {
-  try {
-    return decodeURIComponent(dirName);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Pi encodes a cwd as `--<resolved-cwd-with-separators-as-dashes>--`. */
-export function piProjectDirFromCwd(cwd: string): string {
-  const resolvedCwd = path.resolve(cwd);
-  const safePath = `--${resolvedCwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-  return path.join(path.join(PI_AGENT_DIR, "sessions"), safePath);
-}
-
-/** Discover Pi session roots visible from the current process and project. */
-export function piSessionRoots(cwd?: string): string[] {
-  const roots = [path.join(PI_AGENT_DIR, "sessions"), PI_SESSIONS];
-  const globalSettingsDir = readPiSettingsSessionDir(
-    path.join(PI_AGENT_DIR, "settings.json"),
-  );
-  if (globalSettingsDir) roots.push(globalSettingsDir);
-  if (cwd) {
-    const projectSettingsDir = readPiSettingsSessionDir(
-      path.join(path.resolve(cwd), ".pi", "settings.json"),
-    );
-    if (projectSettingsDir) roots.push(projectSettingsDir);
-  }
-
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const root of roots) {
-    const normalized = path.resolve(root);
-    if (seen.has(normalized)) continue;
-    seen.add(normalized);
-    out.push(root);
-  }
-  return out;
 }
 
 /** Lazy stack-based recursive file walk — yields every file path under

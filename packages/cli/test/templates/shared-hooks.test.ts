@@ -13,7 +13,6 @@ import {
 
 const ALL_HOOK_FILES = [
   "session-start.py",
-  "inject-shell-session-context.py",
   "inject-workflow-state.py",
   "inject-subagent-context.py",
   "inject-spec-context.py",
@@ -58,37 +57,8 @@ describe("shared-hooks capability table", () => {
     }
   });
 
-  it("inject-subagent-context.py is restricted to platforms with native sub-agent context delivery", () => {
-    // Codex uses SubagentStart.additionalContext; these remaining platforms
-    // are class-2 and load their context from an agent-definition prelude.
-    const class2 = new Set(["copilot", "gemini", "qoder", "trae"]);
-    for (const [platform, hooks] of Object.entries(SHARED_HOOKS_BY_PLATFORM)) {
-      const has = hooks.includes("inject-subagent-context.py");
-      if (class2.has(platform))
-        expect(
-          has,
-          `${platform} is class-2 pull-based and must not ship inject-subagent-context.py`,
-        ).toBe(false);
-    }
 
-    expect(SHARED_HOOKS_BY_PLATFORM.codex).toContain(
-      "inject-subagent-context.py",
-    );
-  });
 
-  it("inject-spec-context.py is distributed to Claude Code, Codex, and OpenCode", () => {
-    const providers = Object.entries(SHARED_HOOKS_BY_PLATFORM)
-      .filter(([, hooks]) => hooks.includes("inject-spec-context.py"))
-      .map(([platform]) => platform)
-      .sort();
-
-    expect(providers).toEqual(["claude", "codex", "opencode"]);
-  });
-
-  it("codex + copilot do not take the shared session-start.py (they bundle their own)", () => {
-    expect(SHARED_HOOKS_BY_PLATFORM.codex).not.toContain("session-start.py");
-    expect(SHARED_HOOKS_BY_PLATFORM.copilot).not.toContain("session-start.py");
-  });
 
   // A shared hook script only does something if the platform's own hook config
   // invokes it, and those configs are per-vendor files with different event
@@ -131,21 +101,6 @@ describe("shared-hooks capability table", () => {
 
     const SHELL_HOOK: SharedHookName = "inject-shell-session-context.py";
 
-    it("every platform declaring the shell-session hook invokes it from its config", () => {
-      const declaring = Object.entries(SHARED_HOOKS_BY_PLATFORM).filter(
-        ([, hooks]) => hooks.includes(SHELL_HOOK),
-      );
-      // Cursor has shipped this since 0.5.0; an empty list means the filter
-      // above silently stopped matching and every assertion below is vacuous.
-      expect(declaring.length).toBeGreaterThan(0);
-
-      for (const [platform] of declaring) {
-        expect(
-          registrationsOf(platform, SHELL_HOOK),
-          `${platform} declares ${SHELL_HOOK} but no ${platform} config template invokes it — the script would be installed and never run`,
-        ).not.toHaveLength(0);
-      }
-    });
 
     it("no platform invokes the shell-session hook without declaring it", () => {
       for (const [platform, hooks] of Object.entries(
@@ -160,33 +115,7 @@ describe("shared-hooks capability table", () => {
     });
   });
 
-  it("kiro registers session-start, workflow-state, and subagent-context hooks", () => {
-    // Kiro wires per-turn + spawn hooks on both surfaces (CLI agent
-    // userPromptSubmit/agentSpawn + IDE .kiro.hook promptSubmit), so it ships
-    // the same trio as other agent-capable push-based platforms.
-    expect([...SHARED_HOOKS_BY_PLATFORM.kiro].sort()).toEqual(
-      [
-        "inject-subagent-context.py",
-        "inject-workflow-state.py",
-        "session-start.py",
-      ].sort(),
-    );
-  });
 
-  it("zcode registers session-start, workflow-state, subagent-context, and shell-session hooks", () => {
-    // ZCode 3.x ships a workspace hook config (.zcode/config.json) covering
-    // SessionStart + UserPromptSubmit + PreToolUse Agent/Task + PreToolUse
-    // Bash. ZCode is the platform with no verified session env var name at all,
-    // so the PreToolUse Bash ticket is its only route to session identity.
-    expect([...SHARED_HOOKS_BY_PLATFORM.zcode].sort()).toEqual(
-      [
-        "inject-shell-session-context.py",
-        "inject-subagent-context.py",
-        "inject-workflow-state.py",
-        "session-start.py",
-      ].sort(),
-    );
-  });
 
   it("getSharedHookScriptsForPlatform returns exactly the declared set per platform", () => {
     for (const platform of Object.keys(

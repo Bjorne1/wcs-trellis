@@ -44,7 +44,7 @@
 | **任务驱动工作流** | PRD、实现上下文、审查上下文与任务状态统一存放于 `.trellis/tasks/`，AI 开发过程保持结构化、可追溯。 |
 | **项目记忆** | `.trellis/workspace/` 中的工作日志（journal）会保留上一次会话的脉络，因此每次新会话都能基于真实上下文开始。 |
 | **团队共享标准** | Spec 随仓库一同版本化，个人总结出的规则与流程可以直接成为整个团队的基础设施。 |
-| **多平台复用** | 同一套 Trellis 结构覆盖 22 个 AI coding 平台，无需为每个工具单独搭建工作流。 |
+| **多平台复用** | 同一套 Trellis 结构覆盖 Claude Code 与 Codex，无需为每个工具单独搭建工作流。 |
 
 ## 前置要求
 
@@ -61,7 +61,7 @@ npm install -g @mindfoldhq/trellis@latest
 trellis init -u your-name
 
 # 3. 或仅初始化你实际使用的平台
-trellis init --cursor --opencode --codex -u your-name
+trellis init --claude --codex -u your-name
 ```
 
 查看 [快速开始](https://docs.trytrellis.app/zh/start/install-and-first-task) 与 [支持平台](https://docs.trytrellis.app/zh/advanced/multi-platform) 指南以了解详细配置步骤。

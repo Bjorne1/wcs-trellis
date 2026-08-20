@@ -16,31 +16,6 @@ import {
   codexSearch,
   collectCodexTurnsAndEvents,
 } from "./adapters/codex.js";
-import {
-  collectGrokTurnsAndEvents,
-  grokExtractDialogue,
-  grokListSessions,
-  grokSearch,
-} from "./adapters/grok.js";
-import {
-  opencodeExtractDialogue,
-  opencodeListSessions,
-  opencodeSearch,
-} from "./adapters/opencode.js";
-import {
-  collectPiTurnsAndEvents,
-  piExtractDialogue,
-  piListSessions,
-  piSearch,
-} from "./adapters/pi.js";
-import {
-  collectZcodeTurnsAndEvents,
-  prepareZcodeSessionStore,
-  releaseZcodeSessionStore,
-  zcodeExtractDialogue,
-  zcodeListSessions,
-  zcodeSearch,
-} from "./adapters/zcode.js";
 import { buildBrainstormWindows } from "./phase.js";
 import { relevanceScore, searchInDialogue } from "./search.js";
 import type {
@@ -89,23 +64,12 @@ export function resolveFilter(filter?: MemFilter): MemFilter {
 }
 
 /** Fan out to every in-scope platform, merge by recency, cap at `f.limit`. */
-export function listAll(
-  f: MemFilter,
-  warnings: MemWarning[] = [],
-): MemSessionInfo[] {
+export function listAll(f: MemFilter): MemSessionInfo[] {
   const all: MemSessionInfo[] = [];
   if (f.platform === "all" || f.platform === "claude")
     all.push(...claudeListSessions(f));
   if (f.platform === "all" || f.platform === "codex")
     all.push(...codexListSessions(f));
-  if (f.platform === "all" || f.platform === "grok")
-    all.push(...grokListSessions(f));
-  if (f.platform === "all" || f.platform === "opencode")
-    all.push(...opencodeListSessions(f));
-  if (f.platform === "all" || f.platform === "pi")
-    all.push(...piListSessions(f));
-  if (f.platform === "all" || f.platform === "zcode")
-    all.push(...zcodeListSessions(f, warnings));
   all.sort((a, b) =>
     (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? ""),
   );
@@ -121,35 +85,15 @@ function extractDialogue(
       return claudeExtractDialogue(s);
     case "codex":
       return codexExtractDialogue(s, warnings);
-    case "grok":
-      return grokExtractDialogue(s, warnings);
-    case "opencode":
-      return opencodeExtractDialogue(s);
-    case "pi":
-      return piExtractDialogue(s);
-    case "zcode":
-      return zcodeExtractDialogue(s, warnings);
   }
 }
 
-function searchSession(
-  s: MemSessionInfo,
-  kw: string,
-  warnings: MemWarning[] = [],
-): SearchHit {
+function searchSession(s: MemSessionInfo, kw: string): SearchHit {
   switch (s.platform) {
     case "claude":
       return claudeSearch(s, kw);
     case "codex":
       return codexSearch(s, kw);
-    case "grok":
-      return grokSearch(s, kw);
-    case "opencode":
-      return opencodeSearch(kw);
-    case "pi":
-      return piSearch(s, kw);
-    case "zcode":
-      return zcodeSearch(s, kw, warnings);
   }
 }
 
@@ -165,19 +109,11 @@ function collectTurnsAndEvents(
       return collectClaudeTurnsAndEvents(s);
     case "codex":
       return collectCodexTurnsAndEvents(s, warnings);
-    case "grok":
-      return collectGrokTurnsAndEvents(s, warnings);
-    case "opencode":
-      return { turns: opencodeExtractDialogue(s), events: [] };
-    case "pi":
-      return collectPiTurnsAndEvents(s);
-    case "zcode":
-      return collectZcodeTurnsAndEvents(s, warnings);
   }
 }
 
-/** Build a parent → descendants index (transitively flattened) for OpenCode
- * sub-agent chains. Other platforms have no native `parent_id`. */
+/** Build a parent → descendants index (transitively flattened) for sessions
+ * that record a native `parent_id`. */
 function buildChildIndex(
   sessions: readonly MemSessionInfo[],
 ): Map<string, MemSessionInfo[]> {
@@ -210,7 +146,7 @@ function searchSessionWithChildren(
   warnings: MemWarning[],
 ): SearchHit {
   const children = childIndex.get(s.id) ?? [];
-  if (children.length === 0) return searchSession(s, kw, warnings);
+  if (children.length === 0) return searchSession(s, kw);
   const merged: DialogueTurn[] = [...extractDialogue(s, warnings)];
   for (const c of children) merged.push(...extractDialogue(c, warnings));
   return searchInDialogue(merged, kw);
@@ -220,10 +156,9 @@ function searchSessionWithChildren(
 export function findSessionById(
   id: string,
   f: MemFilter,
-  warnings: MemWarning[] = [],
 ): MemSessionInfo | undefined {
   const wide: MemFilter = { ...f, cwd: undefined, limit: WIDE_LIMIT };
-  const all = listAll(wide, warnings);
+  const all = listAll(wide);
   return all.find((s) => s.id === id) ?? all.find((s) => s.id.startsWith(id));
 }
 
@@ -234,22 +169,14 @@ interface PhaseSlice {
   warnings: MemWarning[];
 }
 
-/** Slice cleaned dialogue by phase. Claude / Codex / Grok / Pi / ZCode have
- * native boundary detection; OpenCode degrades to "all turns + warning". */
+/** Slice cleaned dialogue by phase. Claude / Codex both have native boundary
+ * detection via task.py events. */
 function sliceMemPhase(
   s: MemSessionInfo,
   phase: MemPhase,
   warnings: MemWarning[] = [],
 ): PhaseSlice {
-  if (phase === "all" || s.platform === "opencode") {
-    if (phase !== "all" && s.platform === "opencode") {
-      warnings.push({
-        code: "opencode-phase-unsupported",
-        message:
-          `--phase ${phase} on platform=opencode is not yet supported; ` +
-          `returning full dialogue.`,
-      });
-    }
+  if (phase === "all") {
     const turns = extractDialogue(s, warnings);
     return {
       groups: [{ label: null, turns }],
@@ -316,13 +243,13 @@ function sliceMemPhase(
 
 // ---------- public API ----------
 
-/** List session metadata across Claude / Codex / Grok / OpenCode / Pi / ZCode,
- * sorted by recency and capped at the filter's `limit` (default 50). */
+/** List session metadata across Claude / Codex, sorted by recency and capped
+ * at the filter's `limit` (default 50). */
 export function listMemSessions(
   options?: ListMemSessionsOptions,
 ): MemSessionInfo[] {
   const warnings: MemWarning[] = [];
-  const sessions = listAll(resolveFilter(options?.filter), warnings);
+  const sessions = listAll(resolveFilter(options?.filter));
   for (const warning of warnings) options?.onWarning?.(warning);
   return sessions;
 }
@@ -338,7 +265,7 @@ export function searchMemSessions(
   const includeChildren = options.includeChildren === true;
   const warnings: MemWarning[] = [];
 
-  const candidates = listAll({ ...f, limit: WIDE_LIMIT }, warnings);
+  const candidates = listAll({ ...f, limit: WIDE_LIMIT });
   const childIndex = includeChildren
     ? buildChildIndex(candidates)
     : new Map<string, MemSessionInfo[]>();
@@ -349,26 +276,18 @@ export function searchMemSessions(
     candidateIds.has(s.parent_id);
 
   const matches: MemSearchMatch[] = [];
-  const zcodeCandidate = candidates.find((s) => s.platform === "zcode");
-  if (zcodeCandidate) {
-    prepareZcodeSessionStore(zcodeCandidate.filePath, warnings);
-  }
-  try {
-    for (const s of candidates) {
-      if (isAbsorbedChild(s)) continue;
-      const hit = includeChildren
-        ? searchSessionWithChildren(s, kw, childIndex, warnings)
-        : searchSession(s, kw, warnings);
-      if (hit.count === 0) continue;
-      matches.push({
-        session: s,
-        hit,
-        score: relevanceScore(hit),
-        descendantsMerged: childIndex.get(s.id)?.length ?? 0,
-      });
-    }
-  } finally {
-    releaseZcodeSessionStore();
+  for (const s of candidates) {
+    if (isAbsorbedChild(s)) continue;
+    const hit = includeChildren
+      ? searchSessionWithChildren(s, kw, childIndex, warnings)
+      : searchSession(s, kw);
+    if (hit.count === 0) continue;
+    matches.push({
+      session: s,
+      hit,
+      score: relevanceScore(hit),
+      descendantsMerged: childIndex.get(s.id)?.length ?? 0,
+    });
   }
   matches.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
@@ -393,7 +312,7 @@ export function extractMemDialogue(
   const f = resolveFilter(options.filter);
   const phase: MemPhase = options.phase ?? "all";
   const warnings: MemWarning[] = [];
-  const s = findSessionById(options.sessionId, f, warnings);
+  const s = findSessionById(options.sessionId, f);
   if (!s) throw new MemSessionNotFoundError(options.sessionId, warnings);
 
   const slice = sliceMemPhase(s, phase, warnings);

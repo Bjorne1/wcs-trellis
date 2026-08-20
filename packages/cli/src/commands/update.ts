@@ -45,12 +45,6 @@ import {
   workflowMdTemplate,
 } from "../templates/trellis/index.js";
 import { agentsMdContent } from "../templates/markdown/index.js";
-import {
-  COPILOT_INSTRUCTIONS_BLOCK_END,
-  COPILOT_INSTRUCTIONS_BLOCK_START,
-  COPILOT_INSTRUCTIONS_PATH,
-  getCopilotInstructions,
-} from "../templates/copilot/index.js";
 
 import {
   ALL_MANAGED_DIRS,
@@ -236,16 +230,6 @@ function buildAgentsMdTemplate(cwd: string): string {
   );
 }
 
-function buildCopilotInstructionsTemplate(cwd: string): string {
-  return buildManagedBlockTemplate(
-    cwd,
-    COPILOT_INSTRUCTIONS_PATH,
-    getCopilotInstructions(),
-    COPILOT_INSTRUCTIONS_BLOCK_START,
-    COPILOT_INSTRUCTIONS_BLOCK_END,
-  );
-}
-
 function isKnownUntrackedTemplate(
   relativePath: string,
   existingContent: string,
@@ -260,35 +244,6 @@ function isKnownUntrackedTemplate(
   }
 
   return LEGACY_UNTRACKED_AGENTS_MD_BLOCK_HASHES.has(computeHash(managedBlock));
-}
-
-function isSafeUntrackedCopilotInstructionsMerge(
-  relativePath: string,
-  existingContent: string,
-  newContent: string,
-): boolean {
-  if (relativePath !== COPILOT_INSTRUCTIONS_PATH) {
-    return false;
-  }
-
-  if (
-    getManagedBlock(
-      existingContent,
-      COPILOT_INSTRUCTIONS_BLOCK_START,
-      COPILOT_INSTRUCTIONS_BLOCK_END,
-    )
-  ) {
-    return false;
-  }
-
-  return (
-    mergeManagedBlockContent(
-      existingContent,
-      getCopilotInstructions(),
-      COPILOT_INSTRUCTIONS_BLOCK_START,
-      COPILOT_INSTRUCTIONS_BLOCK_END,
-    ) === newContent
-  );
 }
 
 /**
@@ -903,12 +858,6 @@ async function collectTemplateFiles(
       for (const [filePath, content] of platformFiles) {
         files.set(filePath, content);
       }
-      if (platformId === "copilot") {
-        files.set(
-          COPILOT_INSTRUCTIONS_PATH,
-          buildCopilotInstructionsTemplate(cwd),
-        );
-      }
     }
   }
 
@@ -1009,13 +958,7 @@ function analyzeChanges(
         if (
           (storedHash && storedHash === currentHash) ||
           (!storedHash &&
-            isKnownUntrackedTemplate(relativePath, existingContent)) ||
-          (!storedHash &&
-            isSafeUntrackedCopilotInstructionsMerge(
-              relativePath,
-              existingContent,
-              newContent,
-            ))
+            isKnownUntrackedTemplate(relativePath, existingContent))
         ) {
           // Either the tracked hash matches, or this is a known pristine template
           // from before the path was hash-tracked. Safe to auto-update.
@@ -1039,7 +982,7 @@ function collectMissingManagedFileHashes(
   hashes: TemplateHashes,
 ): Map<string, string> {
   const files = new Map<string, string>();
-  const managedFiles = new Set([FILE_NAMES.AGENTS, COPILOT_INSTRUCTIONS_PATH]);
+  const managedFiles = new Set<string>([FILE_NAMES.AGENTS]);
 
   for (const file of changes.unchangedFiles) {
     if (managedFiles.has(file.relativePath) && !hashes[file.relativePath]) {

@@ -156,12 +156,6 @@ vite.config.ts.timestamp-*
 .agent-log
 .agent-runner.sh
 
-# OpenCode local config (contains local proxy settings)
-opencode.json
-
-# iFlow local config (if it has local state files)
-.iflow/settings.local.json
-
 # Python cache
 __pycache__/
 *.pyc
@@ -182,9 +176,6 @@ smoke_test/
 
 # Claude Code scheduled tasks session lock
 .claude/scheduled_tasks.lock
-
-# Snow CLI generated project configuration and local runtime data
-/.snow/
 
 tmp/
 tmp1/

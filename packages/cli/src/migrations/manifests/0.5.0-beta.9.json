@@ -22,26 +22,6 @@
         "ce1503c052dadf2470ddb1cade42f331c0fd70d34e895d8d07044ba27548e17e",
         "aa5dd1f39a77b2f4bb827fd14ce7a83fb51870e77f556fe508afce3f8eac0b4e"
       ]
-    },
-    {
-      "type": "safe-file-delete",
-      "from": ".qoder/skills/trellis-finish-work/SKILL.md",
-      "description": "Qoder session-boundary skill → moved to .qoder/commands/trellis-finish-work.md",
-      "reason": "In 0.5.0-beta.9, Qoder session-boundary commands move out of the skill matcher into native Custom Commands so users can invoke them deterministically as `/trellis-finish-work`.",
-      "allowed_hashes": [
-        "c0f3ffa74e1e9990f93e5d44d03bd088c8698da1db4750b74d3eee4809a84aea",
-        "2027d8ea610e0a929a7ce147b29045406db8a8c9c2a767f98d779e5d53162f0c"
-      ]
-    },
-    {
-      "type": "safe-file-delete",
-      "from": ".qoder/skills/trellis-continue/SKILL.md",
-      "description": "Qoder session-boundary skill → moved to .qoder/commands/trellis-continue.md",
-      "reason": "In 0.5.0-beta.9, Qoder session-boundary commands move out of the skill matcher into native Custom Commands so users can invoke them deterministically as `/trellis-continue`.",
-      "allowed_hashes": [
-        "914545dab290e508a4c6b84d0a9f8debe68bcf9117cebe0fa85be0ef709d8fc1",
-        "3d2c83ad710b3b667851e28a473fb259a1330475e6b7417c769432f4a55a76f9"
-      ]
     }
   ],
   "notes": "Code cleanup + additive features; no user task.json mutations. Python readers (`task.py`, `get_context.py`) treat missing canonical fields as null, so legacy tasks keep working. Newly-created bootstrap / migration tasks from this version onward produce the canonical shape. Qoder users who had the two session-boundary skills installed will see them auto-removed (pristine) or prompted for confirm (modified); the new `.qoder/commands/*.md` are written by the standard configure step on `trellis update`."

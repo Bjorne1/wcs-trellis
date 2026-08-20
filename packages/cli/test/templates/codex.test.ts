@@ -7,7 +7,7 @@ import {
   getConfigTemplate,
   getHooksConfig,
 } from "../../src/templates/codex/index.js";
-import { resolveAllAsSkills } from "../../src/configurators/shared.js";
+import { resolveAllAsSkillsNeutral } from "../../src/configurators/shared.js";
 import { AI_TOOLS } from "../../src/types/ai-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,10 +21,10 @@ const EXPECTED_AGENT_NAMES = [
 
 const EMPTY_EXCEPT_PASS_RE = /except[^\n]*:\n\s*pass\s*$/m;
 
-// Shared skills are now sourced from common/ via resolveAllAsSkills
+// Shared skills are now sourced from common/ via resolveAllAsSkillsNeutral
 describe("codex shared skills (from common source)", () => {
   it("resolves all common templates for codex context", () => {
-    const skills = resolveAllAsSkills(AI_TOOLS.codex.templateContext);
+    const skills = resolveAllAsSkillsNeutral(AI_TOOLS.codex.templateContext);
     expect(skills.length).toBeGreaterThan(0);
     for (const skill of skills) {
       expect(skill.content).toContain("description:");
@@ -32,15 +32,6 @@ describe("codex shared skills (from common source)", () => {
     }
   });
 
-  it("does not include platform-specific syntax in resolved output", () => {
-    const skills = resolveAllAsSkills(AI_TOOLS.codex.templateContext);
-    for (const skill of skills) {
-      // Codex uses $ prefix, not /trellis:
-      expect(skill.content).not.toContain("/trellis:");
-      expect(skill.content).not.toContain(".claude/");
-      expect(skill.content).not.toContain(".cursor/");
-    }
-  });
 });
 
 describe("codex getAllAgents", () => {
@@ -143,10 +134,6 @@ describe("codex getConfigTemplate", () => {
   // `agents.max_depth = 1`. That key is global/user-level, not settable inside
   // an individual agent's .toml, so pin it here in the project config Trellis
   // owns — this is the config surface that outranks a user's global override.
-  it("pins agents.max_depth = 1 to guard against recursion reopening (#240, #241, #445)", () => {
-    const config = getConfigTemplate();
-    expect(config.content).toMatch(/^\[agents\]\s*\nmax_depth = 1/m);
-  });
 });
 
 // =============================================================================

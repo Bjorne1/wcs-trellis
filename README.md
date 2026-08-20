@@ -44,7 +44,7 @@
 | **Task-centered workflow** | Keep PRDs, implementation context, review context, and task status in `.trellis/tasks/` so AI work stays structured. |
 | **Project memory** | Journals in `.trellis/workspace/` preserve what happened last time, so each new session starts with real context. |
 | **Team-shared standards** | Specs live in the repo, so one person's hard-won workflow or rule can benefit the whole team. |
-| **Multi-platform setup** | Bring the same Trellis structure to 22 AI coding platforms instead of rebuilding your workflow per tool. |
+| **Multi-platform setup** | Bring the same Trellis structure to Claude Code and Codex instead of rebuilding your workflow per tool. |
 
 ## Prerequisites:
 
@@ -61,7 +61,7 @@ npm install -g @mindfoldhq/trellis@latest
 trellis init -u your-name
 
 # 3. Or initialize with the platforms you actually use
-trellis init --cursor --opencode --codex -u your-name
+trellis init --claude --codex -u your-name
 ```
 
 See the [Quick Start](https://docs.trytrellis.app/start/install-and-first-task) and [Supported Platforms](https://docs.trytrellis.app/advanced/multi-platform) guides for setup details.

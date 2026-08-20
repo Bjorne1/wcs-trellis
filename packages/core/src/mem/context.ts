@@ -117,7 +117,7 @@ export function readMemContext(
 ): MemContextResult {
   const f = resolveFilter(options.filter);
   const warnings: MemWarning[] = [];
-  const s = findSessionById(options.sessionId, f, warnings);
+  const s = findSessionById(options.sessionId, f);
   if (!s) throw new MemSessionNotFoundError(options.sessionId, warnings);
 
   const grep = typeof options.grep === "string" ? options.grep : undefined;
@@ -128,7 +128,7 @@ export function readMemContext(
   let turns: DialogueTurn[] = extractDialogue(s, warnings);
   let mergedChildren = 0;
   if (options.includeChildren === true) {
-    const all = listAll({ ...f, cwd: undefined, limit: WIDE_LIMIT }, warnings);
+    const all = listAll({ ...f, cwd: undefined, limit: WIDE_LIMIT });
     const childIndex = buildChildIndex(all);
     const kids = childIndex.get(s.id) ?? [];
     mergedChildren = kids.length;

@@ -13,75 +13,9 @@
     },
     {
       "type": "rename-dir",
-      "from": ".cursor/skills/trellis-spec-bootstarp",
-      "to": ".cursor/skills/trellis-spec-bootstrap",
-      "description": "Cursor: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".opencode/skills/trellis-spec-bootstarp",
-      "to": ".opencode/skills/trellis-spec-bootstrap",
-      "description": "OpenCode: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
       "from": ".agents/skills/trellis-spec-bootstarp",
       "to": ".agents/skills/trellis-spec-bootstrap",
       "description": "Codex / Gemini CLI (shared): rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".kiro/skills/trellis-spec-bootstarp",
-      "to": ".kiro/skills/trellis-spec-bootstrap",
-      "description": "Kiro: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".qoder/skills/trellis-spec-bootstarp",
-      "to": ".qoder/skills/trellis-spec-bootstrap",
-      "description": "Qoder: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".codebuddy/skills/trellis-spec-bootstarp",
-      "to": ".codebuddy/skills/trellis-spec-bootstrap",
-      "description": "CodeBuddy: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".github/skills/trellis-spec-bootstarp",
-      "to": ".github/skills/trellis-spec-bootstrap",
-      "description": "GitHub Copilot: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".factory/skills/trellis-spec-bootstarp",
-      "to": ".factory/skills/trellis-spec-bootstrap",
-      "description": "Droid: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".pi/skills/trellis-spec-bootstarp",
-      "to": ".pi/skills/trellis-spec-bootstrap",
-      "description": "Pi Agent: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".agent/skills/trellis-spec-bootstarp",
-      "to": ".agent/skills/trellis-spec-bootstrap",
-      "description": "Antigravity: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".windsurf/skills/trellis-spec-bootstarp",
-      "to": ".windsurf/skills/trellis-spec-bootstrap",
-      "description": "Windsurf: rename installed bundled skill directory from typoed name to corrected name."
-    },
-    {
-      "type": "rename-dir",
-      "from": ".kilocode/skills/trellis-spec-bootstarp",
-      "to": ".kilocode/skills/trellis-spec-bootstrap",
-      "description": "Kilo: rename installed bundled skill directory from typoed name to corrected name."
     }
   ],
   "notes": "Beta patch on top of 0.6.0-beta.22. Run `trellis update --migrate` to rename installed `trellis-spec-bootstarp/` skill directories to `trellis-spec-bootstrap/` across every platform you have configured (silently skips ones you do not). Plain `trellis update` also installs the new `trellis-session-insight` bundled skill and the `.trellis/agents/{check,implement}.md` channel runtime files."

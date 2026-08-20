@@ -95,7 +95,6 @@ src/migrations/
 - 自动批量更新 hash 追踪
 - 移动后自动清理空的源目录
 - 嵌套目录按深度优先处理（避免父目录先移动导致子目录找不到）
-- 目标目录不存在时，是否自动执行取决于归属：只有当 manifest 记录了 `from` 目录下的文件（即这个目录是 trellis 自己建的）才会 `auto`；否则视为可能是用户自建的同名目录（例如真实的 `.windsurf/` 编辑器配置），路由到 `skip`（即使 `--force` 也不执行）。详见下方分类逻辑与 [Filesystem Safety](./filesystem-safety.md)。
 
 ### safe-file-delete 示例
 
@@ -180,7 +179,6 @@ src/migrations/
 update:
   skip:
     - .claude/commands/trellis/my-custom.md
-    - .cursor/commands/
 ```
 
 - 支持文件路径和目录路径（目录路径以 `/` 结尾，匹配所有子文件）
@@ -200,7 +198,7 @@ update:
 
 #### Why this matters
 
-`.codex/`, `.claude/`, `.opencode/` etc. contain platform-specific user data:
+`.codex/`, `.claude/` etc. contain platform-specific user data:
 - `.codex/sessions/*.jsonl` — Codex chat history
 - `.codex/history` — Codex prompt history
 - `.claude/projects/<sanitized-cwd>/*.jsonl` — Claude Code conversation history
@@ -265,7 +263,7 @@ Even with the manifest contract above, `trellis init` and `trellis uninstall` re
 
 #### Tests required for any change in this area
 
-- Integration: pre-populate user files under `.codex/`, `.claude/`, `.opencode/`, run init+uninstall, assert user data preserved.
+- Integration: pre-populate user files under `.codex/` and `.claude/`, run init+uninstall, assert user data preserved.
 - Integration: pre-existing `AGENTS.md` (skip-existing path), uninstall preserves it.
 - Integration: poisoned manifest (manually injected key) → update OR uninstall prunes it, user file survives.
 - Unit: `recordWrite` instrumentation — new/overwrite recorded, identical/skip/append NOT recorded.

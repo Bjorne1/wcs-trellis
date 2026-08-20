@@ -6,7 +6,7 @@
 
 ## Overview
 
-This project is a **TypeScript monorepo** using ES modules. It publishes a CLI package (`@mindfoldhq/trellis`) and a reusable core package (`@mindfoldhq/trellis-core`). The source code also follows a **dogfooding architecture** - Trellis uses its own configuration files (`.cursor/`, `.claude/`, `.trellis/`) as templates for new projects.
+This project is a **TypeScript monorepo** using ES modules. It publishes a CLI package (`@mindfoldhq/trellis`) and a reusable core package (`@mindfoldhq/trellis-core`). The source code also follows a **dogfooding architecture** - Trellis uses its own configuration files (`.claude/`, `.codex/`, `.trellis/`) as templates for new projects.
 
 ---
 
@@ -46,12 +46,6 @@ packages/
 These directories are copied to `dist/` during build and used as templates:
 
 ```
-.cursor/                 # Cursor configuration (dogfooded)
-├── commands/            # Slash commands for Cursor
-│   ├── start.md
-│   ├── finish-work.md
-│   └── ...
-
 .claude/                 # Claude Code configuration (dogfooded)
 ├── commands/            # Slash commands
 ├── agents/              # Multi-agent pipeline agents
@@ -82,7 +76,6 @@ Files that are copied directly from Trellis project to user projects:
 
 | Source | Destination | Description |
 |--------|-------------|-------------|
-| `.cursor/` | `.cursor/` | Entire directory copied |
 | `.claude/` | `.claude/` | Entire directory copied |
 | `.trellis/scripts/` | `.trellis/scripts/` | All scripts copied |
 | `.trellis/workflow.md` | `.trellis/workflow.md` | Direct copy |
@@ -106,7 +99,6 @@ pnpm build
 
 # Result:
 dist/
-├── .cursor/           # From project root .cursor/
 ├── .claude/           # From project root .claude/
 ├── .trellis/          # From project root .trellis/ (filtered)
 │   ├── scripts/       # All scripts (no multi_agent/)
@@ -149,25 +141,25 @@ returning `Map<relPath, content>` — the single description of what that
 platform installs. `configure` is derived from it in the registry.
 
 ```typescript
-// configurators/cursor.ts
-export function collectCursorTemplates(): Map<string, string> {
+// configurators/<platform>.ts
+export function collectExampleTemplates(): Map<string, string> {
   const files = collectBothTemplates(
-    AI_TOOLS.cursor.templateContext,
-    (n) => `.cursor/commands/trellis-${n}.md`,
-    ".cursor/skills",
+    AI_TOOLS.example.templateContext,
+    (n) => `.example/commands/trellis-${n}.md`,
+    ".example/skills",
   );
   for (const agent of getAllAgents()) {
-    files.set(`.cursor/agents/${agent.name}.md`, agent.content);
+    files.set(`.example/agents/${agent.name}.md`, agent.content);
   }
-  for (const [k, v] of collectSharedHooks(".cursor/hooks", "cursor")) {
+  for (const [k, v] of collectSharedHooks(".example/hooks", "example")) {
     files.set(k, v);
   }
-  files.set(".cursor/hooks.json", resolvePlaceholders(getHooksConfig()));
+  files.set(".example/hooks.json", resolvePlaceholders(getHooksConfig()));
   return files;
 }
 
 // configurators/index.ts
-cursor: fromTemplates(collectCursorTemplates),
+example: fromTemplates(collectExampleTemplates),
 ```
 
 Full contract — map key/value rules, the three platforms that also need a
@@ -407,7 +399,7 @@ Packages that received a remote template download (tracked via `remoteSpecPackag
 - Describe a platform's file set exactly once, in its `collect<Platform>Templates()`
 - Keep generic templates in `src/templates/markdown/`
 - Use `.md.txt` or `.yaml.txt` for template files
-- Update dogfooding sources (`.cursor/`, `.claude/`, `.trellis/scripts/`) when making changes
+- Update dogfooding sources (`.claude/`, `.codex/`, `.trellis/scripts/`) when making changes
 - Always use `python3` explicitly when documenting script invocation (Windows compatibility)
 
 ### DON'T

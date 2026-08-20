@@ -53,30 +53,6 @@ describe("trellis platforms (#396)", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("--json reports configured platforms with id, displayName, configDir", () => {
-    fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
-    fs.mkdirSync(path.join(tmpDir, ".cursor"), { recursive: true });
-    writeTrackedPlatforms(tmpDir, [
-      ".claude/commands/trellis/continue.md",
-      ".cursor/commands/trellis-continue.md",
-    ]);
-
-    const result = runCli(tmpDir, ["platforms", "--json"]);
-
-    expect(result.status).toBe(0);
-    const parsed = JSON.parse(result.stdout) as {
-      platforms: { id: string; displayName: string; configDir: string }[];
-    };
-    const ids = parsed.platforms.map((p) => p.id).sort();
-    expect(ids).toEqual(["claude-code", "cursor"]);
-
-    const claude = parsed.platforms.find((p) => p.id === "claude-code");
-    expect(claude).toEqual({
-      id: "claude-code",
-      displayName: "Claude Code",
-      configDir: ".claude",
-    });
-  });
 
   it("--json reports an empty list when no platform is configured", () => {
     const result = runCli(tmpDir, ["platforms", "--json"]);

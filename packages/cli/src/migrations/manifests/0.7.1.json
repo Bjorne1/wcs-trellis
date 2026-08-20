@@ -1,0 +1,9 @@
+{
+  "version": "0.7.1",
+  "description": "Patch release for the WCS Trellis distribution and release tooling.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Bug Fixes:**\n- fix(windows): improve cross-platform release and template test compatibility.\n- fix(workflow): keep explicit task creation and red-evidence routing consistent across generated platform assets.\n\n**Internal:**\n- chore(release): remove the obsolete marketplace submodule dependency from CI and release checks.",
+  "migrations": [],
+  "notes": "Run `trellis update`, then start a new session to pick up the workflow and release-tooling fixes."
+}

@@ -2,8 +2,8 @@
  * mem.ts — CLI wrapper over `@blulotus/trellis-core/mem`.
  *
  * The reusable retrieval / context-extraction logic lives in core; this file
- * owns only CLI concerns: argument parsing, terminal rendering, the OpenCode
- * "reader unavailable" notice, and process exit behavior.
+ * owns only CLI concerns: argument parsing, terminal rendering, and process
+ * exit behavior.
  *
  * Commands:
  *   list                          list sessions (default if no command)
@@ -65,15 +65,7 @@ export function parseArgv(argv: readonly string[]): Argv {
   return { cmd, positional, flags };
 }
 
-const VALID_PLATFORMS: readonly string[] = [
-  "claude",
-  "codex",
-  "grok",
-  "opencode",
-  "pi",
-  "zcode",
-  "all",
-];
+const VALID_PLATFORMS: readonly string[] = ["claude", "codex", "all"];
 
 /** Translate parsed CLI flags into a core `MemFilter`. Validation failures
  * exit the process — core never sees raw CLI flags. */
@@ -121,29 +113,6 @@ function die(msg: string): never {
   process.exit(2);
 }
 
-// ---------- OpenCode reader notice ----------
-//
-// OpenCode 1.2+ moved to a SQLite store; the native dependency was reverted in
-// 0.6.0-beta.4 due to install failures. Core's OpenCode adapter is a silent
-// no-op — surfacing the degraded state is a CLI presentation concern, emitted
-// once per process whenever the OpenCode source is in scope.
-
-let opencodeWarned = false;
-function warnOpencodeUnavailable(): void {
-  if (opencodeWarned) return;
-  opencodeWarned = true;
-  process.stderr.write(
-    "⚠️  tl mem: OpenCode platform reader is temporarily unavailable in this build.\n" +
-      "    OpenCode 1.2+ moved to SQLite; the native dependency was reverted in\n" +
-      "    0.6.0-beta.4 due to install failures. Re-enabled in a future release.\n",
-  );
-}
-
-function maybeWarnOpencode(f: MemFilter): void {
-  if (f.platform === "all" || f.platform === "opencode")
-    warnOpencodeUnavailable();
-}
-
 // ---------- formatting ----------
 
 const HOME = os.homedir();
@@ -188,7 +157,6 @@ function printWarnings(
 
 function cmdList(argv: Argv): void {
   const f = buildFilter(argv.flags);
-  maybeWarnOpencode(f);
   const warnings: { message: string }[] = [];
   const rows = listMemSessions({
     filter: f,
@@ -212,7 +180,6 @@ function cmdSearch(argv: Argv): void {
   const kw = argv.positional[0];
   if (!kw) die("usage: search <keyword>");
   const f = buildFilter(argv.flags);
-  maybeWarnOpencode(f);
   const includeChildren = argv.flags["include-children"] === true;
   const result = searchMemSessions({
     keyword: kw,
@@ -276,7 +243,6 @@ function cmdProjects(argv: Argv): void {
   // session counts. AI calls this first to learn which project paths have
   // recent activity, then picks one for `--cwd` in a follow-up `search`.
   const f = buildFilter({ ...argv.flags, global: true });
-  maybeWarnOpencode(f);
   const warnings: { message: string }[] = [];
   const rows = listMemProjects({
     filter: f,
@@ -321,7 +287,6 @@ function cmdContext(argv: Argv): void {
   if (!id)
     die("usage: context <session-id> [--grep KW] [--turns N] [--around M]");
   const f = buildFilter(argv.flags);
-  maybeWarnOpencode(f);
 
   const grepRaw = argv.flags.grep;
   const grep = typeof grepRaw === "string" ? grepRaw : undefined;
@@ -422,7 +387,6 @@ function cmdExtract(argv: Argv): void {
   const id = argv.positional[0];
   if (!id) die("usage: extract <session-id>");
   const f = buildFilter(argv.flags);
-  maybeWarnOpencode(f);
 
   const phase = parsePhaseFlag(argv.flags.phase);
   const grepRaw = argv.flags.grep;
@@ -481,7 +445,7 @@ function cmdExtract(argv: Argv): void {
 }
 
 function cmdHelp(): void {
-  console.log(`trellis mem — list/search Claude/Codex/Grok/OpenCode/Pi/ZCode sessions
+  console.log(`trellis mem — list/search Claude/Codex sessions
 
 commands:
   list                          list sessions (default if no command)
@@ -493,7 +457,7 @@ commands:
                                 use this to discover which --cwd to pass to search
 
 flags:
-  --platform claude|codex|grok|opencode|pi|zcode|all   default all
+  --platform claude|codex|all            default all
   --since YYYY-MM-DD                     inclusive lower bound
   --until YYYY-MM-DD                     inclusive upper bound
   --global                               include all projects (default: cwd-scoped)
@@ -501,12 +465,11 @@ flags:
   --limit N                              cap output (default 50)
   --grep KW                              extract / context: filter turns by keyword (multi-token AND)
   --phase brainstorm|implement|all       extract: slice by Trellis brainstorm windows
-                                         (default all; brainstorm = [task.py create, task.py start);
-                                         Claude/Codex/Grok/Pi/ZCode supported; OpenCode warns + returns all)
+                                         (default all; brainstorm = [task.py create, task.py start))
   --turns N                              context: number of hit turns to return (default 3)
   --around N                             context: turns of surrounding context per hit (default 1)
   --max-chars N                          context: total char budget (default 6000, ~1500 tokens)
-  --include-children                     search / context: merge OpenCode sub-agent sessions into parent
+  --include-children                     search / context: merge sub-agent sessions into parent
   --json                                 emit JSON
   --help, -h                             show this help
 

@@ -7,7 +7,7 @@ paths:
 # `tl mem` — Cross-Platform AI Session Memory
 
 How Trellis indexes, searches, and extracts dialogue from on-disk session files
-written by Claude Code, Codex, OpenCode, Pi Agent, and ZCode.
+written by Claude Code and Codex.
 
 The retrieval engine lives in `@mindfoldhq/trellis-core/mem` (`packages/core/src/mem/`);
 `packages/cli/src/commands/mem.ts` is a thin CLI wrapper over it. See "Package
@@ -25,9 +25,6 @@ CLIs already drop on disk:
 | ----------- | -------------------------------------------------------------------------------------------------- |
 | Claude Code | `~/.claude/projects/<sanitized-cwd>/<id>.jsonl`                                                    |
 | Codex       | `~/.codex/sessions/**/rollout-<ts>-<id>.jsonl`                                                     |
-| OpenCode    | Reader unavailable in 0.6.0-beta.4 (reverted, see Notes)                                           |
-| Pi Agent    | `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<id>.jsonl` or env/settings custom session dir |
-| ZCode       | `~/.zcode/cli/db/db.sqlite` plus active `db.sqlite-wal` / `db.sqlite-shm` files                    |
 
 For every session, `mem` can: list metadata (id / cwd / time), grep cleaned
 dialogue across all of them, drill into a single session for a token-budgeted
@@ -56,8 +53,8 @@ invoked from the `tl` Commander wire.
 **Core owns** (`packages/core/src/mem/`, public surface at the
 `@mindfoldhq/trellis-core/mem` subpath — **not** the root barrel):
 
-- persisted-session readers / adapters for Claude Code, Codex, OpenCode, Pi,
-  and ZCode (`adapters/{claude,codex,opencode,pi,zcode}.ts`)
+- persisted-session readers / adapters for Claude Code and Codex
+  (`adapters/{claude,codex}.ts`)
 - search, relevance scoring, excerpt selection (`search.ts`)
 - dialogue cleaning (`dialogue.ts`), filtering (`filter.ts`)
 - dialogue-context extraction (`context.ts`), brainstorm-phase slicing
@@ -73,7 +70,6 @@ invoked from the `tl` Commander wire.
 - `runMem`, argv parsing (`parseArgv`), and CLI flag → `MemFilter` translation
 - terminal rendering: `printSessions`, `shortDate`, `shortPath`, row formatting
 - `--json` output shaping (preserving the stable JSON field names)
-- the OpenCode-unavailable stderr notice (`warnOpencodeUnavailable`)
 - `process.exit` codes and `die`
 
 The CLI imports core through the public subpath only:
@@ -112,7 +108,7 @@ Cross-cutting (`buildFilter`):
 
 | Flag                                          | Default         | Notes                                                                                                                                                                |
 | --------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--platform claude\|codex\|opencode\|pi\|zcode\|all` | `all` | Validated by the CLI against the `MemSourceFilter` union (hand-written guard, no zod). Unknown value → exit 2. |
+| `--platform claude\|codex\|all` | `all` | Validated by the CLI against the `MemSourceFilter` union (hand-written guard, no zod). Unknown value → exit 2. |
 | `--since YYYY-MM-DD`                          | none            | Inclusive lower bound. Parsed by `new Date(value)`; invalid → exit 2.                                                                                                |
 | `--until YYYY-MM-DD`                          | none            | Inclusive upper bound; parser appends `T23:59:59.999Z` so a date string covers the whole UTC day.                                                                    |
 | `--cwd <path>`                                | `process.cwd()` | Project scope. Resolved with `path.resolve`. Combined with `--global` → `--global` wins.                                                                             |
@@ -127,7 +123,7 @@ Subcommand-specific:
 | `--turns N`          | `context`            | `3`                   | Number of hit turns to surface.                                                                                                                                    |
 | `--around M`         | `context`            | `1`                   | Turns of context on either side of each hit; deduped via `Set`.                                                                                                    |
 | `--max-chars N`      | `context`            | `6000` (~1500 tokens) | Total char budget. Per-turn cap is `floor(N/2)`; turns exceeding it are head-truncated with `…[+X chars]`.                                                         |
-| `--include-children` | `search`, `context`  | off                   | Merge OpenCode sub-agent descendants into parent before search/context (only OpenCode populates `parent_id`). No-op in 0.6.0-beta.4 (OpenCode reader unavailable). |
+| `--include-children` | `search`, `context`  | off                   | Merge sub-agent descendants into their parent before search/context. A no-op unless an adapter populates `parent_id` — neither Claude Code nor Codex does today. |
 | `--json`             | all                  | off                   | Machine-readable output for AI consumption.                                                                                                                        |
 
 ---
@@ -141,9 +137,6 @@ three functions:
 | -------- | ---------------------------------------------------- | ------------------------- | ------------------------------------------------- |
 | Claude   | `core/mem/adapters/claude.ts:claudeListSessions`     | `claudeExtractDialogue`   | `claudeSearch`                                    |
 | Codex    | `core/mem/adapters/codex.ts:codexListSessions`       | `codexExtractDialogue`    | `codexSearch`                                     |
-| OpenCode | `core/mem/adapters/opencode.ts:opencodeListSessions` | `opencodeExtractDialogue` | `opencodeSearch` (degraded no-op in 0.6.0-beta.4) |
-| Pi       | `core/mem/adapters/pi.ts:piListSessions`             | `piExtractDialogue`       | `piSearch`                                        |
-| ZCode    | `core/mem/adapters/zcode.ts:zcodeListSessions`       | `zcodeExtractDialogue`    | `zcodeSearch`                                     |
 
 `core/mem/sessions.ts:listAll` fans out to the platform list functions and
 merges results sorted by `updated ?? created` descending; the same module's
@@ -189,161 +182,6 @@ merges results sorted by `updated ?? created` descending; the same module's
     becomes a synthetic `[compact]\n<text>` turn, and prior turns are
     discarded.
 
-### Pi Agent
-
-#### 1. Scope / Trigger
-
-Adding or changing Pi support means editing the zero-dependency adapter at
-`core/mem/adapters/pi.ts`, the explicit dispatchers in `core/mem/sessions.ts`,
-project aggregation in `core/mem/projects.ts`, and CLI platform validation/help
-in `commands/mem.ts`.
-
-#### 2. Signatures
-
-The Pi adapter exports the same platform functions as the other adapters plus
-its phase collector:
-
-```ts
-export function piListSessions(f: MemFilter): MemSessionInfo[];
-export function piExtractDialogue(s: MemSessionInfo): DialogueTurn[];
-export function piSearch(s: MemSessionInfo, kw: string): SearchHit;
-export function collectPiTurnsAndEvents(s: MemSessionInfo): {
-  turns: DialogueTurn[];
-  events: TaskPyEvent[];
-};
-```
-
-#### 3. Contracts
-
-- **Roots**: inspect the default root under
-  `~/.pi/agent/sessions/--<encoded-cwd>--/`, `PI_CODING_AGENT_DIR`,
-  `PI_CODING_AGENT_SESSION_DIR`, global `~/.pi/agent/settings.json`, and the
-  scoped project's `.pi/settings.json`. Resolve relative `sessionDir` values
-  from the directory containing their settings file, matching Pi's settings
-  contract. Custom session dirs contain direct `.jsonl` files and must be
-  filtered by the header `cwd`.
-- **Metadata**: the first row must be a `type: "session"` header. Emit
-  `platform: "pi"`, `id`, `cwd`, `created`, `updated`, `filePath`, and optional
-  `title` from the latest `session_info.name`. Do not use the first user
-  message as a title.
-- **Active branch**: Pi JSONL is tree-shaped. Build `id -> entry`, choose the
-  last non-header entry in file order as the active leaf, then walk `parentId`
-  to root. Never scan all rows linearly for dialogue/search.
-- **Compaction**: if the active path contains compactions, use the latest one:
-  emit `[compact summary]` first, then entries from `firstKeptEntryId` up to the
-  compaction entry, then entries after compaction. Discard older pre-compaction
-  entries and their `task.py` boundary events.
-- **Cleaning**: keep user text, assistant `text` blocks, `custom_message` text,
-  `[branch summary]`, and `[compact summary]`. Drop thinking, tool results,
-  bash output, image payloads, and tool-call arguments from dialogue.
-- **Phase signals**: collect `task.py create|start` from assistant `toolCall`
-  blocks where `name` is `bash` or `shell` and `arguments.command` is a string,
-  and from `message.role === "bashExecution"` with string `command`.
-
-#### 4. Validation & Error Matrix
-
-| Condition                                            | Required behavior                                   |
-| ---------------------------------------------------- | --------------------------------------------------- |
-| Missing Pi roots                                     | Return `[]` silently                                |
-| Malformed JSONL row or unknown entry type            | Skip silently                                       |
-| Header has unknown cwd under `--cwd` scope           | Drop the session                                    |
-| Abandoned branch contains matching text              | `search` / `extract` must not include it            |
-| Discarded pre-compaction text contains matching text | `search` / `extract` must not include it            |
-| `--phase brainstorm` has no Pi `task.py` boundary    | Shared no-boundary warning + full dialogue fallback |
-| `--phase implement` has no Pi `task.py` boundary     | Shared no-boundary warning + empty result           |
-
-#### 5. Good/Base/Bad Cases
-
-- Good: `trellis mem search kw --platform pi --cwd /repo` searches only the
-  cleaned active branch for `/repo`, with compaction already applied.
-- Base: `trellis mem list --platform pi --json` returns metadata rows with the
-  latest session name when `/name` or `--name` was used.
-- Bad: a linear scan over every Pi row leaks `/tree` abandoned branches and old
-  pre-compaction history into search results.
-
-#### 6. Tests Required
-
-- Core adapter fixtures for listing, title, settings/custom root, cleaned
-  extraction, active branch, compaction, and search.
-- Core phase fixtures for assistant `toolCall` and `bashExecution` boundaries,
-  including compaction dropping stale events.
-- Public API tests for `platform: "pi"`, `readMemContext`,
-  `extractMemDialogue(... phase: "brainstorm")`, and `listMemProjects().by_platform.pi`.
-- CLI tests for `--platform pi`, JSON list/search/context/extract output, and
-  help text.
-
-#### 7. Wrong vs Correct
-
-Wrong — linear scan leaks inactive history:
-
-```ts
-readJsonl(file, (entry) => {
-  if (entry.type === "message") turns.push(turnFromMessage(entry.message));
-});
-```
-
-Correct — resolve the active path first, then clean:
-
-```ts
-const path = walkParentIdsFromLastLeaf(entries);
-const effective = applyLatestPiCompaction(path);
-for (const entry of effective) addCleanTurnAndTaskEvents(entry);
-```
-
-### ZCode
-
-- **Layout**: one shared SQLite database at `~/.zcode/cli/db/db.sqlite` with
-  `session`, `message`, and `part` tables. Recent commits may exist only in the
-  sibling WAL.
-- **Snapshot safety**: the zero-dependency reader double-reads the WAL-index
-  header, fixes the committed end mark at `mxFrame`, validates WAL header/frame
-  cumulative checksums, and retries when main/WAL/shm changes during capture.
-- **Single-session memory**: extract/context traverse `message` and `part` with
-  predicates and retain only rows belonging to the requested session. Search
-  prepares one whole-db store for the command and releases it in `finally`.
-- **Degradation**: missing storage means no sessions. Corrupt files, unstable
-  WAL snapshots, or missing required tables/columns produce empty ZCode output
-  plus one structured `zcode-db-unreadable` warning; core never prints it.
-- **Cleaning/phase**: text parts become user/assistant turns; compaction starts
-  the effective dialogue at the latest summary; Bash tool parts provide
-  `task.py create|start` boundaries.
-
-### OpenCode (reader unavailable as of 0.6.0-beta.4+)
-
-In 0.6.0-beta.3 a SQLite-backed reader was added for OpenCode 1.2+
-(which migrated from JSON tree to `~/.local/share/opencode/opencode.db`).
-That release relied on a `better-sqlite3` native dependency that broke
-installation on Windows + restricted networks (China, corporate
-firewalls): `prebuild-install` timed out fetching binaries, the fallback
-`node-gyp` rebuild required VS2017+ build tools, and `trellis` failed to
-install at all on machines that did not have a C toolchain. 0.6.0-beta.4
-reverted the dependency. See `quality-guidelines.md` "Native dependency
-policy" for the broader rule.
-
-Current behavior:
-
-- `opencodeListSessions` returns `[]`.
-- `opencodeExtractDialogue` returns `[]`.
-- `opencodeSearch` returns an empty hit.
-- All three call `warnOpencodeUnavailable()` which writes one stderr line
-  per process (cached via module-level flag).
-
-Re-enabling OpenCode requires an install-resilient backend. Acceptable
-options, ordered by preference:
-
-1. **Pure-JS / WASM** — `sql.js` bundled WASM. No native build, identical
-   bytes on every platform, slightly higher memory cost.
-2. **Shell-out** — invoke the user's system `sqlite3` CLI when present;
-   skip OpenCode with a clear message when absent. No native build, zero
-   bundle cost, depends on host.
-3. **`node:sqlite`** — once it graduates from experimental in Node LTS.
-   Native but ships with the runtime, no install-time compile.
-4. **`optionalDependencies` + soft-degrade** — only as a last resort, and
-   only if the soft-degrade path matches today's "empty list + one-shot
-   warning" UX exactly so a missing dep does not regress install reliability.
-
-See follow-up task notes.
-
 ### `SessionInfo` contract
 
 Every list function emits items conforming to the `MemSessionInfo` type
@@ -351,14 +189,14 @@ Every list function emits items conforming to the `MemSessionInfo` type
 
 | Field       | Required      | Source                                                                                                                                                  |
 | ----------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `platform`  | yes           | `claude` / `codex` / `opencode` / `pi` / `zcode`                                                                                                        |
+| `platform`  | yes           | `claude` / `codex`                                                                                                                                      |
 | `id`        | yes           | platform session id                                                                                                                                     |
-| `title`     | optional      | Claude index `title`, OpenCode `title`, Pi latest `session_info.name`; Codex has no title                                                               |
-| `cwd`       | optional      | OpenCode `directory`, Claude index/event `cwd`, Codex first-event `payload.cwd`, Pi session header `cwd`                                                |
+| `title`     | optional      | Claude index `title`; Codex has no title                                                                                                                |
+| `cwd`       | optional      | Claude index/event `cwd`, Codex first-event `payload.cwd`                                                                                               |
 | `created`   | optional ISO  | first-event/header timestamp; Codex falls back to filename timestamp                                                                                    |
-| `updated`   | optional ISO  | `fs.statSync(file).mtime` for Claude/Codex fallback; Pi prefers latest user/assistant activity and falls back to mtime; OpenCode `session.time_updated` |
-| `filePath`  | yes           | absolute path to the session's primary file (OpenCode: shared `opencode.db`)                                                                            |
-| `parent_id` | OpenCode only | sub-agent linkage from `session.parent_id`; Pi `parentSession` is fork/clone source metadata and must not participate in `--include-children`           |
+| `updated`   | optional ISO  | `fs.statSync(file).mtime` for Claude/Codex fallback                                                                                                     |
+| `filePath`  | yes           | absolute path to the session's primary file                                                                                                             |
+| `parent_id` | optional      | sub-agent linkage, when an adapter can prove it; fork/clone source metadata must not participate in `--include-children`                                |
 
 ---
 
@@ -509,9 +347,10 @@ collapse to one chunk.
 
 ## Sub-agent merging (`--include-children`)
 
-OpenCode is the only platform with a native parent-child link
-(the `parent_id` column on the SQLite `session` table). When
-`--include-children` is set:
+No current adapter emits a native parent-child link, so `--include-children`
+is a no-op today. The machinery stays because it is platform-neutral: any
+adapter that can prove a parent session sets `SessionInfo.parent_id`, and then,
+when `--include-children` is set:
 
 1. `core/mem/sessions.ts:buildChildIndex` walks the candidate list and builds a
    `Map<parent_id, descendants[]>` with **transitive flattening** — a parent
@@ -542,19 +381,14 @@ never absorb children.
   `projects` subcommand to discover other cwds first.
 - **No write path**: `mem` never modifies session files, indexes, or any other
   state. It is a strict reader.
-- **No remote/cloud sync**: OpenCode's optional cloud sync is invisible here.
-  Local OpenCode reading is also unavailable in 0.6.0-beta.4 (reverted — see
-  the OpenCode section above).
 - **No transitive dependency on Trellis runtime**: `core/mem/` does not import
   from `configurators/`, `migrations/`, `templates/`, or `.trellis/scripts`,
   and does not depend on the CLI package. It uses only
   `node:fs / node:path / node:os` — no `zod`, no `console.*`, no
-  `process.exit`. The OpenCode native-dep path (`better-sqlite3`) was removed
-  in 0.6.0-beta.4.
-- **No OpenCode-style sub-agent linkage outside OpenCode**: even if a future
-  Codex / Claude release exposes parent-child IDs, the current
-  `buildChildIndex` only consults `s.parent_id`, which only OpenCode emits.
-  Adding cross-platform sub-agent merging means extending `SessionInfo`.
+  `process.exit`. No native SQLite dependency is used.
+- **No sub-agent linkage today**: `buildChildIndex` only consults
+  `s.parent_id`, and neither adapter emits it. Adding sub-agent merging means
+  teaching an adapter to populate that field.
 
 ---
 
@@ -647,13 +481,9 @@ platform-native shell-call events (which the dialogue cleaners discard):
     (joined with spaces).
 - **Window end**: the next `task.py start` shell call in the same session.
 
-Pi uses the same boundary model, with shell commands recovered from assistant
-`toolCall` blocks named `bash` / `shell` (`arguments.command`) and from
-`bashExecution.command` messages.
-
 The detection is performed by `core/mem/adapters/claude.ts:collectClaudeTurnsAndEvents`
-(Claude), `core/mem/adapters/codex.ts:collectCodexTurnsAndEvents` (Codex), and
-`core/mem/adapters/pi.ts:collectPiTurnsAndEvents` (Pi) — each is a single pass
+(Claude) and `core/mem/adapters/codex.ts:collectCodexTurnsAndEvents`
+(Codex) — each is a single pass
 that produces both the cleaned `DialogueTurn[]` (semantically identical to the
 platform's `*ExtractDialogue`) AND a list of `task.py` events with their
 `turnIndex` (the cleaned-turn index AT THE TIME the shell call was seen).
@@ -784,9 +614,6 @@ machine-readable stdout used by `--json` consumers.
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Claude   | Native — boundary detection on `tool_use` (Bash) blocks in raw JSONL                                                                        |
 | Codex    | Native — boundary detection on `function_call` events whose `name` is `exec_command` or `shell` (Codex's Bash twin)                         |
-| Pi       | Native — boundary detection on assistant `toolCall` blocks named `bash` / `shell` and `bashExecution.command` messages on the active branch |
-| ZCode    | Native — boundary detection on `part.data` Bash tool records after compaction has selected the effective dialogue                         |
-| OpenCode | Reader unavailable in 0.6.0-beta.4+ (returns empty + warning)                                                                               |
 
 `core/mem/adapters/codex.ts:collectCodexTurnsAndEvents` is the Codex twin of
 `collectClaudeTurnsAndEvents`. Same single-pass shape: it produces both the
@@ -796,11 +623,9 @@ read from `function_call` events whose `name === "exec_command"` (or `"shell"`)
 and whose argument payload contains `task.py create|start`. The dispatcher in
 `cmdExtract` picks the right collector by `s.platform`. Pairing
 (`buildBrainstormWindows`), labeling (`slugFromTaskDir`), and the fallback
-matrix above are shared across Claude, Codex, and Pi — only the raw-event
+matrix above are shared across Claude and Codex — only the raw-event
 parser differs.
 
-OpenCode is the only outstanding gap and is gated on the OpenCode reader
-itself; see "OpenCode reader status" below.
 
 ### Combining with `--grep`
 
@@ -812,14 +637,14 @@ brainstorm windows, not the entire session.
 
 `claudeExtractDialogue`, `codexExtractDialogue`, and `piExtractDialogue`
 discard the shell-call carrier blocks (Claude `tool_use`, Codex top-level
-`function_call`, Pi `toolCall` / `bashExecution`) because their text is not
+`function_call`) because their text is not
 user/assistant dialogue.
 Boundary signals live in those blocks, so phase slicing CANNOT post-filter
 cleaned turns — the signals would already be gone. The implementation does
 its own raw-JSONL pass per platform (`collectClaudeTurnsAndEvents` /
 `collectCodexTurnsAndEvents` / `collectPiTurnsAndEvents`) that builds turns and
 tracks shell-call events together. When adding a new boundary signal (e.g., for
-OpenCode once the reader returns), follow this pattern: read raw events in a
+), follow this pattern: read raw events in a
 single pass, do not consume the cleaned `DialogueTurn[]`.
 
 ### Compaction resets task.py event list, not just turns
@@ -868,9 +693,10 @@ threshold is computed against the raw input.
 
 ### Mishandling compaction
 
-Claude and Codex compaction events reset the `turns` array; Pi compaction first
+Claude and Codex compaction events reset the `turns` array; a compaction-aware
+adapter must do the same, because a naive
 rebuilds the effective active branch from the latest `compaction` entry. A
-linear Pi scan is wrong because old entries remain on disk. The synthetic
+linear scan is wrong when old entries remain on disk. The synthetic
 markers (`[compact summary]` / `[compact]`) are intentional — they make
 compaction visible to readers and surface correctly in `extract` output.
 
@@ -959,7 +785,7 @@ checks. The public domain types live in `core/mem/types.ts`:
 
 | Type                                                                 | Domain                                                              |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `MemSourceKind` / `MemSourceFilter`                                  | `"claude" \| "codex" \| "opencode" \| "pi" \| "zcode"` (+ `"all"` for filters) |
+| `MemSourceKind` / `MemSourceFilter`                                  | `"claude" \| "codex"` (+ `"all"` for filters) |
 | `MemSessionInfo`                                                     | unified session metadata across platforms                           |
 | `DialogueRole` / `DialogueTurn`                                      | `"user" \| "assistant"` and a cleaned turn                          |
 | `SearchExcerpt` / `SearchHit` / `MemSearchMatch` / `MemSearchResult` | search output                                                       |
@@ -1033,7 +859,7 @@ CLI tests (`packages/cli/test/commands/`):
 | File                      | What it covers                                                                                                        |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `mem-helpers.test.ts`     | CLI-only helpers: `parseArgv`, CLI flag → `MemFilter` translation, `shortDate`, `shortPath`                           |
-| `mem-integration.test.ts` | end-to-end `runMem` with stdout capture, `--json` output shape, exit behavior, the OpenCode-unavailable stderr notice |
+| `mem-integration.test.ts` | end-to-end `runMem` with stdout capture, `--json` output shape, exit behavior |
 
 ### Fixture pattern (core adapter tests)
 
@@ -1048,7 +874,7 @@ Mandatory for any new platform-parser test in `packages/core/test/mem/`:
 3. **`await import("../../src/mem/adapters/...")`** _after_ the mock is set up.
 4. **Per-test fixture seeding**: write minimal JSONL / JSON files into
    `<fakeHome>/.claude/projects/...` or `<fakeHome>/.codex/sessions/...`.
-   OpenCode fixture seeding is not applicable in 0.6.0-beta.4 — the reader
+   Fixture seeding covers the two live readers — a future reader
    is a degraded no-op and tests assert "returns empty".
 5. **`utimesSync`** is the canonical way to anchor `mtime` for `updated`
    assertions — `fs.statSync(file).mtime` is what the adapters read.
@@ -1118,7 +944,7 @@ subpath surface — the CLI must not deep-import them.
 | `shortDate`, `shortPath`                                     | terminal formatting — tested directly        |
 
 The CLI wrapper composes the core API, renders results, maps warnings to
-stderr, emits the OpenCode-unavailable notice, and owns exit codes.
+stderr and owns exit codes.
 
 ---
 
