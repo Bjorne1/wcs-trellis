@@ -1993,14 +1993,14 @@ When adding a new accessor in `common/config.py`:
 packages:
   cli:
     path: packages/cli
-  docs-site:
-    path: docs-site
+  docs:
+    path: docs
     type: submodule       # optional, marks git submodule
 default_package: cli      # first non-submodule package
 
 # Session behavior
 session:
-  spec_scope: active_task  # or ["cli", "docs-site"] or omit for full scan
+  spec_scope: active_task  # or ["cli", "docs"] or omit for full scan
 
 # Update behavior
 update:
@@ -2060,7 +2060,7 @@ def get_task_package(task_dir: Path) -> str | None:
     return get_default_package(repo_root)
 ```
 
-Why wrong: silently diverges from `task.json.package`. A task created under `packages/cli` but later read from `docs-site/` would flip package, breaking spec scope, session runtime, and Linear sync idempotency.
+Why wrong: silently diverges from `task.json.package`. A task created under `packages/cli` but later read from another package root would flip package, breaking spec scope, session runtime, and Linear sync idempotency.
 
 #### Correct — read the frozen field, fall back through `resolve_package`
 

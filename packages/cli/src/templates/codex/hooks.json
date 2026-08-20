@@ -6,6 +6,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "{{PYTHON_CMD}} -X utf8 .codex/hooks/session-start.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
             "command": "{{PYTHON_CMD}} -X utf8 .codex/hooks/inject-spec-context.py",
             "timeout": 15
           }

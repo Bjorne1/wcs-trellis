@@ -2,7 +2,17 @@
 
 Wrap up the current session: archive the active task (and any other completed-but-unarchived tasks the user wants to clean up) and record the session journal. Code commits are NOT done here — those happen in workflow Phase 3.4 before you invoke this command.
 
-## Step 1: Survey current state
+## Step 1: Engage this session
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/task.py engage
+```
+
+Context injection is opt-in, so this is a no-op when the session already ran an entry point and the step that makes the rest of this command see the active task when it did not.
+
+If this exits non-zero, **stop and report it** — without session identity the active-task pointer cannot be resolved and Step 3 would archive the wrong thing or nothing.
+
+## Step 2: Survey current state
 
 ```bash
 {{PYTHON_CMD}} ./.trellis/scripts/get_context.py --mode record
@@ -12,11 +22,11 @@ This prints:
 
 - **My active tasks** — review whether any besides the current one are actually done (code merged, AC met) and should be archived this round.
 - **Git status** — quick visual on what's dirty.
-- **Recent commits** — you'll need their hashes in Step 4 for `--commit`.
+- **Recent commits** — you'll need their hashes in Step 5 for `--commit`.
 
-If `--mode record` surfaces other completed tasks not tied to the current session, surface them to the user with a one-shot confirmation: "These N tasks look done — archive them too in this round? [y/N]". Default is no; the current active task is always archived in Step 3 regardless.
+If `--mode record` surfaces other completed tasks not tied to the current session, surface them to the user with a one-shot confirmation: "These N tasks look done — archive them too in this round? [y/N]". Default is no; the current active task is always archived in Step 4 regardless.
 
-## Step 2: Sanity check — classify dirty paths
+## Step 3: Sanity check — classify dirty paths
 
 Run:
 
@@ -38,21 +48,21 @@ Then route:
   > "Working tree has uncommitted code changes from this task: `<list>`. Return to workflow Phase 3.4 to commit them before running `{{CMD_REF:finish-work}}`."
 
   Do NOT run `git commit` here. Do NOT prompt the user to commit. The user goes back to Phase 3.4 and the AI drives the batched commit there.
-- **All remaining paths look unrelated** (other parallel-window work) — report them once and continue to Step 3:
+- **All remaining paths look unrelated** (other parallel-window work) — report them once and continue to Step 4:
   > "FYI, dirty files outside this task's scope — leaving them for the other window: `<list>`."
 - **Genuinely unsure** — ask the user once: "Are `<list>` this task's work I forgot to commit, or another window's? (commit / ignore)" — then route per their answer.
 
-## Step 3: Archive task(s)
+## Step 4: Archive task(s)
 
 ```bash
 {{PYTHON_CMD}} ./.trellis/scripts/task.py archive <task-name>
 ```
 
-At minimum: the current active task (if any). Plus any extra tasks the user confirmed in Step 1. Each archive produces a `chore(task): archive ...` commit via the script's auto-commit.
+At minimum: the current active task (if any). Plus any extra tasks the user confirmed in Step 2. Each archive produces a `chore(task): archive ...` commit via the script's auto-commit.
 
 If there is no active task and the user did not confirm any cleanup archives, skip this step.
 
-## Step 4: Record session journal
+## Step 5: Record session journal
 
 ```bash
 {{PYTHON_CMD}} ./.trellis/scripts/add_session.py \
@@ -61,6 +71,6 @@ If there is no active task and the user did not confirm any cleanup archives, sk
   --summary "Brief summary"
 ```
 
-Use the work-commit hashes produced in Phase 3.4 (visible in Step 1's `Recent commits` list, or via `git log --oneline`) for `--commit`. Do not include the archive commit hashes from Step 3. This produces a `chore: record journal` commit.
+Use the work-commit hashes produced in Phase 3.4 (visible in Step 2's `Recent commits` list, or via `git log --oneline`) for `--commit`. Do not include the archive commit hashes from Step 4. This produces a `chore: record journal` commit.
 
 Final git log order: `<work commits from 3.4>` → `chore(task): archive ...` (one or more) → `chore: record journal`.

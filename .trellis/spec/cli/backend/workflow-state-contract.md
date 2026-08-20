@@ -70,20 +70,27 @@ Both regexes MUST use the `\1` backreference variant — `[workflow-state:([A-Za
 1. On every UserPromptSubmit (or platform equivalent — see hook reachability
    matrix below), the hook receives stdin JSON containing `cwd`.
 2. It walks up from `cwd` to find `.trellis/`. If none, exit 0.
-3. It calls `common.active_task.resolve_active_task()` to look up the
+3. It calls `common.active_task.is_session_engaged()`. If this session never
+   opted in — no `.trellis/.runtime/engaged/<context_key>.json` written by
+   `task.py engage`, which `trellis-start` / `trellis-continue` /
+   `trellis-finish-work` run as their first step — exit 0 with no output, ahead
+   of every read below. `is_session_engaged` has **no** single-session fallback,
+   unlike `resolve_active_task`: another window's leftover file must never
+   engage this session.
+4. It calls `common.active_task.resolve_active_task()` to look up the
    per-session active task. If absent → status is the pseudo `no_task`. If
    the pointer is stale (task dir deleted) → status is `stale_<source_type>`.
-4. Otherwise it reads `task.json.status` from the resolved task directory.
-5. It resolves the workflow file (per-task resolution order below: the
+5. Otherwise it reads `task.json.status` from the resolved task directory.
+6. It resolves the workflow file (per-task resolution order below: the
    active task's `.trellis/workflows/<id>.md` when selected, else
    `.trellis/workflow.md`) and parses every `[workflow-state:STATUS]` block.
-6. Codex may map `planning` / `in_progress` to `planning-inline` /
+7. Codex may map `planning` / `in_progress` to `planning-inline` /
    `in_progress-inline` based on `codex.dispatch_mode`; all other platforms
    use the plain status.
-7. It looks up the current status in the parsed map. If found → emits the
+8. It looks up the current status in the parsed map. If found → emits the
    block body in `<workflow-state>...</workflow-state>`. If not found →
    emits the generic line `Refer to workflow.md for current step.`
-8. The output JSON has shape:
+9. The output JSON has shape:
 
    ```json
    {"hookSpecificOutput": {
@@ -264,7 +271,7 @@ Which breadcrumbs actually fire in normal flow:
 
 | Status | Reachability | Notes |
 |--------|--------------|-------|
-| `no_task` | ✅ reachable | Pseudo-status; emitted when `resolve_active_task()` returns no pointer. |
+| `no_task` | ✅ reachable | Pseudo-status; emitted when `resolve_active_task()` returns no pointer **in an engaged session** — either `trellis-start` has not created the task yet, or `task.py finish` / `archive` cleared the pointer mid-session. An unengaged session emits nothing at all, so this body never speaks for one. |
 | `planning` | ✅ reachable | After `cmd_create` (which now auto-sets the session pointer when available) and before `cmd_start`. `planning-inline` is the Codex inline-mode breadcrumb body for the same task status. |
 | `in_progress` | ✅ reachable | After `cmd_start`, until `cmd_archive`. `in_progress-inline` is the Codex inline-mode breadcrumb body for the same task status. |
 | `completed` | ❌ DEAD in normal flow | `cmd_archive` writes `status="completed"` and immediately moves the task dir to `archive/`. The session-pointer cleanup in `clear_task_from_sessions` runs before the move, so the resolver loses the pointer in the same call. The block body in workflow.md is preserved for a future status-transition redesign (e.g. an explicit `in_progress → completed` command) but no current code path produces it. |
@@ -272,7 +279,7 @@ Which breadcrumbs actually fire in normal flow:
 
 **Test invariant** (`test/regression.test.ts`): workflow-state blocks must
 preserve the runtime gates that cannot be recovered from model memory:
-`no_task` triages and asks for task-creation consent; planning distinguishes
+`no_task` triages; planning distinguishes
 lightweight PRD-only tasks from complex tasks requiring `prd.md`, `design.md`,
 and `implement.md`; in-progress keeps the commit step reachable before
 `/trellis:finish-work`. See:

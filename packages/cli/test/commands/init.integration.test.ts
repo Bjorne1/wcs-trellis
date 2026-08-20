@@ -313,12 +313,13 @@ describe("init() integration", () => {
     await init({ yes: true, kiro: true });
 
     expect(fs.existsSync(path.join(tmpDir, ".kiro", "skills"))).toBe(true);
-    // Kiro is agent-capable → trellis-start skill not emitted.
+    // Opt-in engagement: the start entry point ships on every platform,
+    // because the SessionStart hook injects nothing until it runs.
     expect(
       fs.existsSync(
         path.join(tmpDir, ".kiro", "skills", "trellis-start", "SKILL.md"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(tmpDir, ".kiro", "skills", "trellis-finish-work", "SKILL.md"),
@@ -402,12 +403,12 @@ describe("init() integration", () => {
     expect(
       fs.existsSync(path.join(tmpDir, ".codebuddy", "commands", "trellis")),
     ).toBe(true);
-    // CodeBuddy is agent-capable → start.md not emitted.
+    // Opt-in engagement → start.md ships.
     expect(
       fs.existsSync(
         path.join(tmpDir, ".codebuddy", "commands", "trellis", "start.md"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(
@@ -432,10 +433,10 @@ describe("init() integration", () => {
     await init({ yes: true, copilot: true });
 
     expect(fs.existsSync(path.join(tmpDir, ".github", "prompts"))).toBe(true);
-    // Copilot is agent-capable → start.prompt.md not emitted.
+    // Opt-in engagement → start.prompt.md ships.
     expect(
       fs.existsSync(path.join(tmpDir, ".github", "prompts", "start.prompt.md")),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(tmpDir, ".github", "prompts", "finish-work.prompt.md"),
@@ -481,7 +482,7 @@ describe("init() integration", () => {
     };
     const hashes = hashesFile.hashes ?? {};
     const trackedPaths = Object.keys(hashes).map((p) => p.replace(/\\/g, "/"));
-    expect(trackedPaths).not.toContain(".github/prompts/start.prompt.md");
+    expect(trackedPaths).toContain(".github/prompts/start.prompt.md");
     expect(trackedPaths).toContain(".github/prompts/finish-work.prompt.md");
     expect(trackedPaths).toContain(".github/prompts/continue.prompt.md");
     expect(trackedPaths).toContain(COPILOT_INSTRUCTIONS_PATH);
@@ -497,12 +498,12 @@ describe("init() integration", () => {
     expect(
       fs.existsSync(path.join(tmpDir, ".gemini", "commands", "trellis")),
     ).toBe(true);
-    // Gemini is agent-capable → start.toml not emitted.
+    // Opt-in engagement → start.toml ships.
     expect(
       fs.existsSync(
         path.join(tmpDir, ".gemini", "commands", "trellis", "start.toml"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(tmpDir, ".gemini", "commands", "trellis", "finish-work.toml"),
@@ -519,12 +520,12 @@ describe("init() integration", () => {
 
   it("#3j droid platform creates commands + skills", async () => {
     await init({ yes: true, droid: true });
-    // Droid is agent-capable → start.md not emitted.
+    // Opt-in engagement → start.md ships.
     expect(
       fs.existsSync(
         path.join(tmpDir, ".factory", "commands", "trellis", "start.md"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(tmpDir, ".factory", "commands", "trellis", "finish-work.md"),
@@ -761,9 +762,8 @@ describe("init() integration", () => {
   it("#3l trae platform writes hooks, commands, agents, and tracked templates", async () => {
     await init({ yes: true, trae: true });
 
-    // Trae is agentCapable && hasHooks, so trellis-start is filtered like other
-    // SessionStart-backed platforms. The generated agents are still pull-based
-    // for sub-agent task context because Trae hooks cannot mutate sub-agent prompts.
+    // The generated agents are pull-based for sub-agent task context because
+    // Trae hooks cannot mutate sub-agent prompts.
     expect(fs.existsSync(path.join(tmpDir, ".trae", "hooks.json"))).toBe(true);
     expect(
       fs.existsSync(path.join(tmpDir, ".trae", "hooks", "session-start.py")),
@@ -780,7 +780,7 @@ describe("init() integration", () => {
     ).toBe(true);
     expect(
       fs.existsSync(path.join(tmpDir, ".trae", "commands", "trellis-start.md")),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(tmpDir, ".trae", "agents", "trellis-implement.md"),
@@ -814,13 +814,12 @@ describe("init() integration", () => {
     );
   });
 
-  it("#3m zcode platform filters start command and writes hooks (hasHooks=true)", async () => {
+  it("#3m zcode platform writes the start command and hooks (hasHooks=true)", async () => {
     await init({ yes: true, zcode: true });
 
     // ZCode owns its private .zcode surface. Commands remain commands, while
-    // .zcode/skills contains workflow/bundled skills only. Since ZCode is
-    // agentCapable && hasHooks, the start command is filtered out (SessionStart
-    // hook injects equivalent context) and hook assets are written.
+    // .zcode/skills contains workflow/bundled skills only. The start command
+    // ships in that command surface — not in shared .agents/skills/.
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(false);
     expect(
       fs.existsSync(
@@ -831,7 +830,7 @@ describe("init() integration", () => {
       fs.existsSync(
         path.join(tmpDir, ".zcode", "commands", "trellis", "start.md"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(tmpDir, ".zcode", "skills", "trellis-start", "SKILL.md"),

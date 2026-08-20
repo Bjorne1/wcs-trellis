@@ -81,39 +81,23 @@ Stable fixes normally flow from `main` to beta/rc by cherry-pick. Beta-only feat
 
 ---
 
-## Docs-site lifecycle
-
-The docs-site root path holds the current stable docs. Beta and RC content live under `beta/` and `rc/`.
-
-| Transition | Script | When |
-|---|---|---|
-| Start a new beta | `docs-site/scripts/docs-beta-start.sh` | Before the first `pnpm release:beta` for a new minor/major, for example `0.6.0-beta.0`. |
-| Beta to RC | `docs-site/scripts/docs-beta-to-rc.sh` | Before the first `pnpm release:rc`, for example `0.6.0-rc.0`. |
-| RC to GA | `docs-site/scripts/docs-promote.sh` | Before `pnpm release:promote`. |
-
-Per-patch beta, RC, or GA releases do not run these lifecycle scripts. They add changelog MDX files, update `docs-site/docs.json`, commit the docs-site submodule first, then bump the submodule pointer in the main repo.
-
-Full docs details live in `.trellis/spec/docs-site/docs/release-lifecycle.md`.
-
----
-
 ## Submodule commit ordering
 
-When a release touches `docs-site` or `marketplace`, commit and push the submodule first, then commit the submodule pointer in the main repo.
+When a release touches `marketplace`, commit and push the submodule first, then commit the submodule pointer in the main repo.
 
 Correct order:
 
 ```bash
-cd docs-site
-git add . && git commit -m "docs: changelog v<version>" && git push origin main
+cd marketplace
+git add . && git commit -m "chore: sync for v<version>" && git push origin main
 
 cd ..
-git add docs-site
-git commit -m "chore: bump docs-site for v<version>"
+git add marketplace
+git commit -m "chore: bump marketplace for v<version>"
 git push origin <branch>
 ```
 
-`packages/cli/scripts/release.js` excludes `docs-site` and `marketplace` from its automatic pre-release staging so submodule pointer changes cannot be hidden inside a generic release commit.
+`packages/cli/scripts/release.js` excludes `marketplace` from its automatic pre-release staging so submodule pointer changes cannot be hidden inside a generic release commit.
 
 ### Contract: every modified submodule must be pushed before the version tag
 
@@ -124,7 +108,7 @@ fatal: remote error: upload-pack: not our ref <SHA>
 fatal: Fetched in submodule path '<name>', but it did not contain <SHA>. Direct fetching of that commit failed.
 ```
 
-This is per-submodule. Pushing `docs-site` but forgetting `marketplace` (or vice versa) still fails. Verify all submodules before `pnpm release`:
+This is per-submodule. Verify every submodule before `pnpm release`:
 
 ```bash
 git submodule foreach 'git fetch origin -q; sha=$(git rev-parse HEAD); \
@@ -160,11 +144,11 @@ Any `FAIL` line means: `cd <submodule> && git checkout -B main && git push origi
 ### Contract: the pre-release sweep MUST exclude `.trellis/`
 
 The pre-release `git add` in `release.js` (the `chore: pre-release updates`
-commit) **must** exclude `.trellis/` from its pathspec, alongside `docs-site`
-and `marketplace`:
+commit) **must** exclude `.trellis/` from its pathspec, alongside
+`marketplace`:
 
 ```js
-run("git add -A -- ':!docs-site' ':!marketplace' ':!.trellis'");
+run("git add -A -- ':!marketplace' ':!.trellis'");
 ```
 
 `.trellis/tasks/` is not gitignored, so a blanket `git add -A` sweeps in any
@@ -175,7 +159,7 @@ ever allowed through `common/safe_commit.py`'s precise allowlist (see the
 through a release-time blanket stage.
 
 > **Incident note (2026-06, #303).** A `release.js` pre-release `git add -A`
-> that excluded only `docs-site`/`marketplace` swept 6 unrelated in-progress
+> that excluded only the submodules swept 6 unrelated in-progress
 > community-governance task files into the pre-release commit twice
 > (`5ee43ecc`, `ec123deb`). The maintainer had to `git rm --cached` three
 > times (`d66405d9`, `81960120`, `3c3219cf`) before finally tracking the
@@ -218,14 +202,13 @@ pnpm release:promote
 `packages/cli/scripts/release.js` runs:
 
 1. `check-manifest-continuity`
-2. `check-docs-changelog --type beta|rc|promote` for prerelease/promotion tracks
-3. core tests
-4. CLI tests
-5. pre-release commit excluding `docs-site`, `marketplace`, and `.trellis`
-6. `bump-versions.js <type>` to update both package versions together
-7. `release-preflight check-versions`
-8. version commit with the version string as the commit message
-9. git tag `v<version>`
+2. core tests
+3. CLI tests
+4. pre-release commit excluding `marketplace` and `.trellis`
+5. `bump-versions.js <type>` to update both package versions together
+6. `release-preflight check-versions`
+7. version commit with the version string as the commit message
+8. git tag `v<version>`
 10. push branch and tags
 11. GitHub Actions publish workflow builds, tests, packs, publishes, and verifies both packages
 
@@ -308,8 +291,6 @@ git -C "$tmpdir" init -q
 - [ ] Worktree is clean except intentional release changes.
 - [ ] Relevant coding specs have been read.
 - [ ] Manifest exists for the target version.
-- [ ] English and Chinese docs-site changelogs exist and match 1:1.
-- [ ] `docs-site/docs.json` points to the new changelog.
 - [ ] Submodule commits are pushed before main repo pointer commits.
 - [ ] `node packages/cli/scripts/release-preflight.js check-versions` passes.
 - [ ] `node packages/cli/scripts/release-preflight.js verify-packed-cli` passes.
@@ -324,5 +305,4 @@ git -C "$tmpdir" init -q
 
 - Core/CLI code ownership and package boundaries: `trellis-core-sdk.md`
 - Manifest format and migration types: `migrations.md`
-- Docs lifecycle: `.trellis/spec/docs-site/docs/release-lifecycle.md`
 - Native dependency policy: `quality-guidelines.md`

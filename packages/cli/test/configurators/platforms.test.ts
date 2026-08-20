@@ -200,6 +200,9 @@ describe("getConfiguredPlatforms", () => {
     expect(result.has("devin")).toBe(true);
   });
 
+  // Cost scales with the whole platform × file matrix (21 platforms, each fully
+  // configured and hashed), so it sits well above the 10s global timeout on
+  // Windows under full-suite load.
   it("detects every platform from the files Trellis tracked for it", async () => {
     for (const id of PLATFORM_IDS) {
       const platformRoot = path.join(tmpDir, id);
@@ -215,7 +218,7 @@ describe("getConfiguredPlatforms", () => {
 
       expect([...getConfiguredPlatforms(platformRoot)]).toEqual([id]);
     }
-  });
+  }, 60_000);
 
   it("ignores unrelated directories", () => {
     fs.mkdirSync(path.join(tmpDir, ".vscode"));
@@ -837,17 +840,18 @@ describe("configurePlatform", () => {
         path.join(tmpDir, ".snow", "skills", "trellis-check", "SKILL.md"),
       ),
     ).toBe(true);
-    // hasHooks=true → trellis-start is filtered out (session inject replaces it)
+    // Opt-in engagement: every platform gets the start entry point, because the
+    // SessionStart hook injects nothing until it runs `task.py engage`.
     expect(
       fs.existsSync(
         path.join(tmpDir, ".snow", "skills", "trellis-start", "SKILL.md"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(tmpDir, ".snow", "commands", "trellis-start.json"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(tmpDir, ".snow", "commands", "trellis-continue.json"),
@@ -927,8 +931,8 @@ describe("configurePlatform", () => {
     }
 
     const templates = collectPlatformTemplates("snow");
-    expect(templates?.has(".snow/commands/trellis-start.json")).toBe(false);
-    expect(templates?.has(".snow/skills/trellis-start/SKILL.md")).toBe(false);
+    expect(templates?.has(".snow/commands/trellis-start.json")).toBe(true);
+    expect(templates?.has(".snow/skills/trellis-start/SKILL.md")).toBe(true);
     expect(templates?.has(".snow/commands/trellis-continue.json")).toBe(true);
     expect(templates?.has(".snow/agents/trellis-implement.md")).toBe(true);
     expect(templates?.has(".snow/agents/trellis-research.md")).toBe(true);
@@ -1111,7 +1115,7 @@ describe("configurePlatform", () => {
       fs.existsSync(
         path.join(tmpDir, ".zcode", "commands", "trellis", "start.md"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(false);
     expect(
       fs.existsSync(
@@ -1195,7 +1199,7 @@ describe("configurePlatform", () => {
 
     const templates = collectPlatformTemplates("zcode");
     expect(templates?.get(".zcode/config.json")).toBe(generatedConfig);
-    expect(templates?.has(".zcode/commands/trellis/start.md")).toBe(false);
+    expect(templates?.has(".zcode/commands/trellis/start.md")).toBe(true);
     expect(
       [...(templates?.keys() ?? [])].some((key) =>
         key.startsWith(".agents/skills/"),
@@ -1454,7 +1458,7 @@ describe("configurePlatform", () => {
 
   it("droid configuration writes commands + skills", async () => {
     await configurePlatform("droid", tmpDir);
-    // Commands (plain md, no frontmatter). Droid is agent-capable → no start.md.
+    // Commands (plain md, no frontmatter). Opt-in engagement → start.md ships.
     const startPath = path.join(
       tmpDir,
       ".factory",
@@ -1462,7 +1466,7 @@ describe("configurePlatform", () => {
       "trellis",
       "start.md",
     );
-    expect(fs.existsSync(startPath)).toBe(false);
+    expect(fs.existsSync(startPath)).toBe(true);
     const finishPath = path.join(
       tmpDir,
       ".factory",
@@ -1647,10 +1651,10 @@ describe("configurePlatform", () => {
   it("collectPlatformTemplates('droid') maps commands under .factory/commands/trellis/", () => {
     const templates = collectPlatformTemplates("droid");
     expect(templates).toBeInstanceOf(Map);
-    // Droid is agent-capable → start.md not emitted.
+    // Opt-in engagement → start.md ships on every platform.
     expect(
       templates?.get(".factory/commands/trellis/start.md"),
-    ).toBeUndefined();
+    ).toBeDefined();
     expect(
       templates?.get(".factory/commands/trellis/finish-work.md"),
     ).toBeDefined();
@@ -1699,8 +1703,8 @@ describe("configurePlatform", () => {
   it("collectPlatformTemplates('copilot') includes tracked + discovery hooks config", () => {
     const templates = collectPlatformTemplates("copilot");
     expect(templates).toBeInstanceOf(Map);
-    // Copilot is agent-capable → start.prompt.md not emitted.
-    expect(templates?.get(".github/prompts/start.prompt.md")).toBeUndefined();
+    // Opt-in engagement → start.prompt.md ships on every platform.
+    expect(templates?.get(".github/prompts/start.prompt.md")).toBeDefined();
     expect(
       templates?.get(".github/prompts/finish-work.prompt.md"),
     ).toBeDefined();

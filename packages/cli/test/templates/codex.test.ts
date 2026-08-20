@@ -97,7 +97,14 @@ describe("codex native sub-agent hooks", () => {
 
     expect(config.hooks.SessionStart).toHaveLength(1);
     expect(config.hooks.SessionStart[0]?.matcher).toBe("^(?:clear|compact)$");
+    // Compaction drops the workflow context an engaged session depends on, so
+    // the Codex session-start copy re-injects it here — before spec context.
+    // Registered on clear/compact only: a spawn event does not match, which is
+    // what keeps the #240 sub-agent recursion vector closed.
     expect(config.hooks.SessionStart[0]?.hooks[0]?.command).toContain(
+      ".codex/hooks/session-start.py",
+    );
+    expect(config.hooks.SessionStart[0]?.hooks[1]?.command).toContain(
       ".codex/hooks/inject-spec-context.py",
     );
 

@@ -1698,6 +1698,75 @@ describe("regression: current-task path normalization", () => {
     );
   }
 
+  /**
+   * Opt into the Trellis workflow for a fixture session.
+   *
+   * Both injection hooks emit nothing until the session is engaged, so any test
+   * asserting on hook output has to engage first. The record is written by the
+   * real `mark_session_engaged`, invoked through a throwaway probe script, so
+   * the context key is derived by production code rather than re-implemented
+   * here — a key this test file computed itself would drift from
+   * `_context_key()` and the tests would pass against the wrong file.
+   *
+   * `platform` must match what the hook under test detects: the shared hooks
+   * derive it from the payload and from their own script path, so a hook
+   * installed under `.claude/hooks/` resolves `claude_<id>` where one under
+   * `.trellis/hooks/` resolves `session_<id>`.
+   */
+  function engageSession(
+    inputData: object,
+    platform?: string,
+    envOverrides: NodeJS.ProcessEnv = {},
+  ): string {
+    const probeRelPath = path.join(".trellis", "engage-probe.py");
+    writeProjectFile(
+      probeRelPath,
+      [
+        "import json, os, pathlib, sys",
+        "sys.path.insert(0, str(pathlib.Path('.trellis/scripts').resolve()))",
+        "from common.active_task import mark_session_engaged",
+        "data = json.load(sys.stdin)",
+        "platform = os.environ.get('TRELLIS_ENGAGE_PLATFORM') or None",
+        "key = mark_session_engaged(pathlib.Path('.').resolve(), data, platform)",
+        "sys.stdout.write(key or '')",
+        "",
+      ].join("\n"),
+    );
+    const key = runPython(probeRelPath, JSON.stringify(inputData), {
+      ...envOverrides,
+      TRELLIS_ENGAGE_PLATFORM: platform ?? "",
+    }).trim();
+    if (!key) {
+      throw new Error(
+        "fixture could not engage the session: mark_session_engaged resolved no context key",
+      );
+    }
+    return key;
+  }
+
+  /**
+   * Engage the standard `workflow-a` fixture session as `platform` resolves it.
+   * The platform matters: a hook installed under `.codex/hooks/` keys the
+   * engaged record `codex_workflow-a`, one under `.claude/hooks/`
+   * `claude_workflow-a`.
+   */
+  function engageWorkflowSession(platform?: string): void {
+    engageSession({ cwd: tmpDir, session_id: "workflow-a" }, platform);
+  }
+
+  /**
+   * Engage a session whose context key is already known — e.g. one the code
+   * under test just proved by writing a shell ticket. Complements
+   * {@link engageSession}, which derives the key through production code when
+   * the test cannot know it up front.
+   */
+  function writeEngagedRecord(contextKey: string): void {
+    writeProjectFile(
+      path.join(".trellis", ".runtime", "engaged", `${contextKey}.json`),
+      JSON.stringify({ engaged: true, platform: "test" }, null, 2),
+    );
+  }
+
   const SESSION_ENV_KEYS = [
     "TRELLIS_CONTEXT_ID",
     "DSH_TRELLIS_CONTEXT_ID",
@@ -3538,6 +3607,9 @@ print(json.dumps({
       path.join(".codex", "hooks", "session-start.py"),
       expectTemplateContent(codexSessionStart, "codex session-start"),
     );
+    // Both hooks are opt-in and resolve their own platform prefix.
+    writeEngagedRecord("claude_session-a");
+    writeEngagedRecord("codex_session-a");
 
     const claudeOutput = runPython(
       path.join(".claude", "hooks", "session-start.py"),
@@ -3573,7 +3645,12 @@ print(json.dumps({
     );
     const envFile = path.join(tmpDir, "claude-env.sh");
 
-    runPython(
+    // Deliberately NOT engaged: the env bridge must run before the opt-in gate.
+    // It is the only channel by which session identity reaches `task.py` in a
+    // Bash child on Claude Code, so gating it would leave `task.py engage`
+    // unable to write the very flag the gate reads — the workflow could never
+    // be entered.
+    const output = runPython(
       path.join(".claude", "hooks", "session-start.py"),
       JSON.stringify({
         session_id: "bash-start-a",
@@ -3584,8 +3661,135 @@ print(json.dumps({
       { CLAUDE_ENV_FILE: envFile },
     );
 
+    expect(output.trim()).toBe("");
     expect(fs.readFileSync(envFile, "utf-8")).toContain(
       "export TRELLIS_CONTEXT_ID=claude_bash-start-a",
+    );
+  });
+
+  // ---------------------------------------------------------------------
+  // Opt-in engagement — both injection hooks stay silent until the user runs
+  // one of the lifecycle entry points (`trellis-start` / `trellis-continue` /
+  // `trellis-finish-work`), each of which runs `task.py engage`. A session that
+  // never asked for Trellis pays no tokens, and an in-flight task belonging to
+  // another window is not consent.
+  // ---------------------------------------------------------------------
+
+  it("[opt-in] session-start.py emits nothing until the session is engaged", () => {
+    setupTaskRepo();
+    writeClaudeSessionStartHook();
+    const input = {
+      cwd: tmpDir,
+      session_id: "optin-a",
+      hook_event_name: "SessionStart",
+    };
+
+    expect(
+      runPython(
+        path.join(".claude", "hooks", "session-start.py"),
+        JSON.stringify(input),
+      ).trim(),
+    ).toBe("");
+
+    engageSession(input, "claude");
+
+    const engaged = runPython(
+      path.join(".claude", "hooks", "session-start.py"),
+      JSON.stringify(input),
+    );
+    expect(engaged).toContain("hookSpecificOutput");
+    expect(engaged).toContain("<trellis-workflow>");
+  });
+
+  it("[opt-in] inject-workflow-state.py emits nothing until the session is engaged", () => {
+    setupTaskRepo();
+    writeProjectFile(
+      path.join(".claude", "hooks", "inject-workflow-state.py"),
+      expectTemplateContent(injectWorkflowStateScript, "inject-workflow-state"),
+    );
+    writeSessionContext("claude_optin-b", ".trellis/tasks/issue-106");
+    const input = { cwd: tmpDir, session_id: "optin-b", prompt: "do the thing" };
+
+    expect(
+      runPython(
+        path.join(".claude", "hooks", "inject-workflow-state.py"),
+        JSON.stringify(input),
+      ).trim(),
+    ).toBe("");
+
+    engageSession(input, "claude");
+
+    expect(
+      runPython(
+        path.join(".claude", "hooks", "inject-workflow-state.py"),
+        JSON.stringify(input),
+      ),
+    ).toContain("<workflow-state>");
+  });
+
+  it("[opt-in] an in-flight task from another window does not engage a new session", () => {
+    setupTaskRepo();
+    writeProjectFile(
+      path.join(".claude", "hooks", "inject-workflow-state.py"),
+      expectTemplateContent(injectWorkflowStateScript, "inject-workflow-state"),
+    );
+    // The other window's session file is the ONLY one, which is exactly when
+    // `resolve_active_task`'s single-session fallback would hand its task to
+    // this session. `is_session_engaged` has no such fallback on purpose.
+    writeSessionContext("claude_other-window", ".trellis/tasks/issue-106");
+    writeEngagedRecord("claude_other-window");
+
+    expect(
+      runPython(
+        path.join(".claude", "hooks", "inject-workflow-state.py"),
+        JSON.stringify({ cwd: tmpDir, session_id: "fresh-window" }),
+      ).trim(),
+    ).toBe("");
+  });
+
+  it("[opt-in] task.py engage writes the flag, and fails loudly without session identity", () => {
+    setupTaskRepo();
+    const taskScript = path.join(tmpDir, ".trellis", "scripts", "task.py");
+
+    const output = execSync(
+      `${pythonCmd} ${JSON.stringify(taskScript)} engage`,
+      {
+        cwd: tmpDir,
+        encoding: "utf-8",
+        env: sessionEnv({ TRELLIS_CONTEXT_ID: "engage-probe" }),
+      },
+    );
+    expect(output).toContain("Trellis engaged for this session: engage-probe");
+    expect(
+      fs.existsSync(
+        path.join(
+          tmpDir,
+          ".trellis",
+          ".runtime",
+          "engaged",
+          "engage-probe.json",
+        ),
+      ),
+    ).toBe(true);
+
+    // No identity at all: engage has no useful degraded mode — a silent
+    // "success" would leave both hooks quiet for the whole session.
+    let failed = false;
+    try {
+      execSync(`${pythonCmd} ${JSON.stringify(taskScript)} engage`, {
+        cwd: tmpDir,
+        encoding: "utf-8",
+        env: sessionEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (error) {
+      failed = true;
+      expect(String((error as { stdout?: string }).stdout ?? "")).toContain(
+        "no session identity available",
+      );
+    }
+    expect(failed, "task.py engage must exit non-zero with no identity").toBe(
+      true,
     );
   });
 
@@ -3761,14 +3965,18 @@ print(json.dumps({
     sessionId: string,
     envOverrides: NodeJS.ProcessEnv = {},
   ): string {
+    const input = {
+      session_id: sessionId,
+      transcript_path: path.join(tmpDir, "transcript.jsonl"),
+      cwd: tmpDir,
+      hook_event_name: "SessionStart",
+    };
+    // Opt-in gate: the hook emits nothing until this session is engaged. The
+    // shared hook detects "claude" from its `.claude/hooks/` install path.
+    engageSession(input, "claude");
     const raw = runPython(
       path.join(".claude", "hooks", "session-start.py"),
-      JSON.stringify({
-        session_id: sessionId,
-        transcript_path: path.join(tmpDir, "transcript.jsonl"),
-        cwd: tmpDir,
-        hook_event_name: "SessionStart",
-      }),
+      JSON.stringify(input),
       // Pin CLAUDE_ENV_FILE inside tmpDir: the hook appends the context key to
       // whatever that variable points at, and a dev running this suite from
       // inside Claude Code exports their own file.
@@ -3780,33 +3988,17 @@ print(json.dumps({
     return payload.hookSpecificOutput.additionalContext;
   }
 
-  function firstReplyNotice(context: string): string {
-    const closingTag = "</first-reply-notice>";
-    const start = context.indexOf("<first-reply-notice>");
+  function maintenanceNotice(context: string): string {
+    const closingTag = "</trellis-maintenance-notice>";
+    const start = context.indexOf("<trellis-maintenance-notice>");
     const end = context.indexOf(closingTag);
-    expect(start, "payload should carry a first-reply notice").toBeGreaterThan(
-      -1,
-    );
+    expect(
+      start,
+      "payload should carry a maintenance notice",
+    ).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     return context.slice(start, end + closingTag.length);
   }
-
-  // The notice exactly as it shipped before the update reminder existed. A
-  // project that is up to date must still emit these bytes and nothing else —
-  // no empty block, no placeholder line. Comparing two runs of the same build
-  // cannot catch a line that is added unconditionally, so this is pinned.
-  const NOTICE_WITHOUT_UPDATE_HINT = [
-    "<first-reply-notice>",
-    "On the first visible assistant reply in this session, briefly acknowledge that Trellis SessionStart context loaded.",
-    "Choose the acknowledgment language in this order:",
-    "1. Use the language of the user's current request (the user message that triggered this reply).",
-    "2. If that request has no clear natural language, use an explicitly established project communication language.",
-    "3. If neither provides a language, output the language-neutral fallback exactly: `Trellis SessionStart ✓`.",
-    "Continue directly with the user's request after the acknowledgment.",
-    "The acknowledgment must not alter the language used for the remainder of the response.",
-    "This notice is one-shot: do not repeat it after the first visible assistant reply in this session.",
-    "</first-reply-notice>",
-  ].join("\n");
 
   function updateMarkerPath(sessionId: string): string {
     return path.join(
@@ -3818,7 +4010,7 @@ print(json.dumps({
   }
 
   it.skipIf(isWindows)(
-    "[session-update-hint] a stale .trellis/.version reaches the user through the first-reply notice",
+    "[session-update-hint] a stale .trellis/.version reaches the user through the maintenance notice",
     () => {
       setupTaskRepo();
       writeClaudeSessionStartHook();
@@ -3829,11 +4021,11 @@ print(json.dumps({
 
       // Inside the notice, not merely somewhere in the payload: a hint the
       // assistant is not told to say out loud never reaches the maintainer.
-      expect(firstReplyNotice(context)).toContain(
+      expect(maintenanceNotice(context)).toContain(
         "Trellis update available: 0.5.0 -> 0.5.9, run trellis update",
       );
-      expect(firstReplyNotice(context)).toContain(
-        "on its own line in that same reply",
+      expect(maintenanceNotice(context)).toContain(
+        "on its own line in your next visible reply, verbatim",
       );
       expect(trellisCliCallCount()).toBe(1);
     },
@@ -3854,7 +4046,8 @@ print(json.dumps({
       const upToDate = sessionStartContext("update-current", fakeCli);
 
       expect(baseline).not.toContain("Trellis update available");
-      expect(firstReplyNotice(upToDate)).toBe(NOTICE_WITHOUT_UPDATE_HINT);
+      // No pending update → no block at all, not an empty one.
+      expect(upToDate).not.toContain("<trellis-maintenance-notice>");
       expect(upToDate).toBe(baseline);
     },
   );
@@ -3922,7 +4115,7 @@ print(json.dumps({
     const context = sessionStartContext("update-unreadable");
 
     expect(context).not.toContain("Trellis update available");
-    expect(context).toContain("<first-reply-notice>");
+    expect(context).not.toContain("<trellis-maintenance-notice>");
     expect(context).toContain("<task-status>");
   });
 
@@ -4138,6 +4331,9 @@ print(json.dumps({
           fs.readFileSync(path.join(ticketDir, ticketName), "utf-8"),
         ) as { context_key: string };
         expect(ticket.context_key).toBeTruthy();
+        // The context hook at the end of this test is opt-in; engage exactly the
+        // key the ticket carries, which is the agreement being verified.
+        writeEngagedRecord(ticket.context_key);
 
         const startOutput = execSync(
           `${pythonCmd} ${JSON.stringify(path.join(tmpDir, ".trellis", "scripts", "task.py"))} start ${JSON.stringify(".trellis/tasks/issue-106")}`,
@@ -4970,7 +5166,7 @@ print(json.dumps({
     }
   });
 
-  it("[#412] shared and Codex contexts include an adaptive one-shot notice without changing payload shape", () => {
+  it("[#412] shared and Codex SessionStart payload shapes stay stable, with no first-reply notice", () => {
     setupTaskRepo();
 
     writeProjectFile(
@@ -4981,9 +5177,18 @@ print(json.dumps({
       path.join(".codex", "hooks", "session-start.py"),
       expectTemplateContent(codexSessionStart, "codex session-start"),
     );
+    // Neither run carries a session id (the shared hook gets no stdin at all),
+    // so pin one identity through TRELLIS_CONTEXT_ID and engage that key —
+    // `resolve_context_key` prefers it over every payload and env source.
+    const contextEnv = { TRELLIS_CONTEXT_ID: "session-412" };
+    engageSession({}, undefined, contextEnv);
 
     const sharedPayload = JSON.parse(
-      runPython(path.join(".claude", "hooks", "session-start.py")),
+      runPython(
+        path.join(".claude", "hooks", "session-start.py"),
+        undefined,
+        contextEnv,
+      ),
     ) as {
       hookSpecificOutput: { hookEventName: string; additionalContext: string };
       additional_context: string;
@@ -4992,6 +5197,7 @@ print(json.dumps({
       runPython(
         path.join(".codex", "hooks", "session-start.py"),
         JSON.stringify({ cwd: tmpDir }),
+        contextEnv,
       ),
     ) as {
       suppressOutput: boolean;
@@ -5026,28 +5232,10 @@ print(json.dumps({
       const ctx = payload.hookSpecificOutput.additionalContext;
       expect(ctx.startsWith("<session-context>")).toBe(true);
       expect(ctx).toContain("Trellis compact SessionStart context");
-      expect(ctx).toContain("<first-reply-notice>");
-      expect(ctx).toContain("the user's current request");
-      expect(ctx).toContain("the user message that triggered this reply");
-      expect(ctx).toContain("has no clear natural language");
-      expect(ctx).toContain(
-        "explicitly established project communication language",
-      );
-      expect(ctx).toContain("Trellis SessionStart ✓");
-      expect(ctx).toContain("Continue directly with the user's request");
-      expect(ctx).toContain(
-        "must not alter the language used for the remainder of the response",
-      );
-      expect(ctx).toContain("This notice is one-shot");
-      expect(ctx.indexOf("the user's current request")).toBeLessThan(
-        ctx.indexOf("explicitly established project communication language"),
-      );
-      expect(
-        ctx.indexOf("explicitly established project communication language"),
-      ).toBeLessThan(ctx.indexOf("Trellis SessionStart ✓"));
-      expect(ctx.indexOf("<first-reply-notice>")).toBeLessThan(
-        ctx.indexOf("<current-state>"),
-      );
+      // Opt-in engagement retired the acknowledgment notice: the user invoked
+      // the entry point, so its own output is the acknowledgment.
+      expect(ctx).not.toContain("<first-reply-notice>");
+      expect(ctx).not.toContain("Trellis SessionStart ✓");
       expect(ctx).toContain("<current-state>");
       expect(ctx).toContain("<trellis-workflow>");
       expect(ctx).toContain("<guidelines>");
@@ -5064,11 +5252,14 @@ print(json.dumps({
       path.join(".codex", "hooks", "session-start.py"),
       expectTemplateContent(codexSessionStart, "codex session-start"),
     );
+    const input = { cwd: tmpDir };
+    engageSession(input, "codex", { TRELLIS_CONTEXT_ID: "codex-240" });
 
     const payload = JSON.parse(
       runPython(
         path.join(".codex", "hooks", "session-start.py"),
-        JSON.stringify({ cwd: tmpDir }),
+        JSON.stringify(input),
+        { TRELLIS_CONTEXT_ID: "codex-240" },
       ),
     ) as {
       hookSpecificOutput: { hookEventName: string; additionalContext: string };
@@ -5149,10 +5340,12 @@ print(json.dumps({
       path.join(".claude", "hooks", "session-start.py"),
       expectTemplateContent(claudeSessionStart, "claude session-start"),
     );
+    const input = { cwd: tmpDir, session_id: "session-a" };
+    engageSession(input, "claude");
 
     const rawOutput = runPython(
       path.join(".claude", "hooks", "session-start.py"),
-      JSON.stringify({ cwd: tmpDir, session_id: "session-a" }),
+      JSON.stringify(input),
     );
     expect(rawOutput).toContain("Status: IN_PROGRESS");
     expect(rawOutput).toContain("Implementation/check context order");
@@ -5191,6 +5384,7 @@ print(json.dumps({
       cwd: tmpDir,
       session_id: "session-a",
     });
+    engageSession({ cwd: tmpDir, session_id: "session-a" }, "claude");
 
     // Baseline: gate off, hooks emit content (sanity check)
     const baselineSession = runPython(
@@ -5494,6 +5688,17 @@ print(json.dumps({
   }
 
   function runInjectWorkflowStateWithInput(inputData: object): string {
+    // The hook is opt-in: engage first, or it exits 0 with no output. Skipped
+    // when the fixture ships no `.trellis/scripts` — there the hook cannot
+    // import `is_session_engaged` at all and takes its stale-scripts branch,
+    // which injects unconditionally.
+    if (
+      fs.existsSync(
+        path.join(tmpDir, ".trellis", "scripts", "common", "active_task.py"),
+      )
+    ) {
+      engageSession(inputData);
+    }
     return runPython(
       path.join(".trellis", "hooks", "inject-workflow-state.py"),
       JSON.stringify(inputData),
@@ -5685,11 +5890,13 @@ print(json.dumps({
       path.join(".codex", "hooks", "inject-workflow-state.py"),
       expectTemplateContent(injectWorkflowStateScript, "inject-workflow-state"),
     );
+    const input = { cwd: tmpDir, session_id: "workflow-a" };
+    engageSession(input, "codex");
 
     const parsed = JSON.parse(
       runPython(
         path.join(".codex", "hooks", "inject-workflow-state.py"),
-        JSON.stringify({ cwd: tmpDir, session_id: "workflow-a" }),
+        JSON.stringify(input),
       ),
     ) as {
       hookSpecificOutput: { hookEventName: string; additionalContext: string };
@@ -5752,6 +5959,11 @@ print(json.dumps({
   it("[#356] inject-workflow-state.py exits when host leaves stdin open with no payload", async () => {
     setupTaskRepo();
     writeWorkflowStateHook();
+    // Empty stdin leaves no payload identity, so the session is engaged through
+    // Kiro's session env var instead — otherwise the opt-in gate exits before
+    // the stdin-read path this test exercises.
+    const kiroEnv = { KIRO_PROJECT_DIR: tmpDir, KIRO_SESSION_ID: "kiro-a" };
+    engageSession({}, "kiro", kiroEnv);
 
     const hookPath = path.join(
       tmpDir,
@@ -5761,7 +5973,7 @@ print(json.dumps({
     );
     const child = spawn(pythonCmd, [hookPath], {
       cwd: tmpDir,
-      env: sessionEnv({ KIRO_PROJECT_DIR: tmpDir }),
+      env: sessionEnv(kiroEnv),
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -6577,9 +6789,15 @@ print(len(entries))
       path.join(".claude", "hooks", "session-start.py"),
       expectTemplateContent(claudeSessionStart, "shared session-start"),
     );
+    // No stdin payload here, so pin one identity and engage it — the opt-in
+    // gate otherwise exits before any block is written.
+    const contextEnv = { TRELLIS_CONTEXT_ID: "session-workflow-v2" };
+    engageSession({}, undefined, contextEnv);
 
     const rawOutput = runPython(
       path.join(".claude", "hooks", "session-start.py"),
+      undefined,
+      contextEnv,
     );
     const payload = JSON.parse(rawOutput) as {
       hookSpecificOutput: { additionalContext: string };
@@ -6626,9 +6844,15 @@ print(len(entries))
       path.join(".claude", "hooks", "session-start.py"),
       expectTemplateContent(claudeSessionStart, "shared session-start"),
     );
+    // No stdin payload here, so pin one identity and engage it — the opt-in
+    // gate otherwise exits before any block is written.
+    const contextEnv = { TRELLIS_CONTEXT_ID: "session-workflow-v2" };
+    engageSession({}, undefined, contextEnv);
 
     const rawOutput = runPython(
       path.join(".claude", "hooks", "session-start.py"),
+      undefined,
+      contextEnv,
     );
     const payload = JSON.parse(rawOutput) as {
       hookSpecificOutput: { additionalContext: string };
@@ -6760,6 +6984,7 @@ print(len(entries))
   it("[issue-codex-dispatch-mode] codex breadcrumb defaults to native auto dispatch when config absent", () => {
     setupTaskRepo();
     writeSessionContext("session_workflow-a", ".trellis/tasks/issue-106");
+    engageWorkflowSession("codex");
     const codexHookPath = writeCodexInjectHook();
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
@@ -6785,6 +7010,7 @@ print(len(entries))
   it("[issue-codex-dispatch-mode] codex breadcrumb routes to plain status when codex.dispatch_mode=sub-agent", () => {
     setupTaskRepo();
     writeSessionContext("session_workflow-a", ".trellis/tasks/issue-106");
+    engageWorkflowSession("codex");
     const codexHookPath = writeCodexInjectHook();
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
@@ -6811,6 +7037,7 @@ print(len(entries))
   it("[issue-codex-dispatch-mode] codex breadcrumb routes to inline tag when codex.dispatch_mode=inline", () => {
     setupTaskRepo();
     writeSessionContext("session_workflow-a", ".trellis/tasks/issue-106");
+    engageWorkflowSession("codex");
     const codexHookPath = writeCodexInjectHook();
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
@@ -6838,6 +7065,7 @@ print(len(entries))
   it("[issue-codex-dispatch-mode] non-codex platform ignores codex.dispatch_mode=inline", () => {
     setupTaskRepo();
     writeSessionContext("session_workflow-a", ".trellis/tasks/issue-106");
+    engageWorkflowSession("claude");
     // Hook installed under .claude/ — _detect_platform returns "claude".
     const claudeHookPath = path.join(
       ".claude",
@@ -7064,6 +7292,7 @@ print(len(entries))
   it("[issue-codex-dispatch-mode] codex hook injects <codex-mode> banner reflecting dispatch_mode", () => {
     setupTaskRepo();
     writeSessionContext("session_workflow-a", ".trellis/tasks/issue-106");
+    engageWorkflowSession("codex");
     const codexHookPath = path.join(
       ".codex",
       "hooks",
@@ -7105,6 +7334,7 @@ print(len(entries))
   it("[issue-codex-dispatch-mode] non-codex hook does NOT inject <codex-mode> banner", () => {
     setupTaskRepo();
     writeSessionContext("session_workflow-a", ".trellis/tasks/issue-106");
+    engageWorkflowSession("claude");
     // Hook installed under .claude/ — _detect_platform returns "claude".
     const claudeHookPath = path.join(
       ".claude",
@@ -8259,9 +8489,9 @@ describe("regression: collectTemplates paths match init directory structure (0.3
 
     const keys = [...templates.keys()];
     expect(keys.some((key) => key.startsWith(".github/prompts/"))).toBe(true);
-    // Copilot is agent-capable → start.prompt.md is not generated;
-    // session-start hook injects workflow overview instead.
-    expect(keys).not.toContain(".github/prompts/start.prompt.md");
+    // Opt-in engagement: the session-start hook injects nothing until an entry
+    // point runs `task.py engage`, so start ships on every platform.
+    expect(keys).toContain(".github/prompts/start.prompt.md");
     expect(keys).toContain(".github/prompts/finish-work.prompt.md");
     expect(keys).toContain(".github/prompts/continue.prompt.md");
     expect(keys.some((key) => key.startsWith(".github/copilot/hooks/"))).toBe(
@@ -8271,7 +8501,7 @@ describe("regression: collectTemplates paths match init directory structure (0.3
     expect(keys).toContain(".github/hooks/trellis.json");
   });
 
-  it("[zcode] collectTemplates tracks hooks + config.json and filters start command", () => {
+  it("[zcode] collectTemplates tracks hooks + config.json and the start command", () => {
     const templates = collectPlatformTemplates("zcode");
     expect(templates).toBeInstanceOf(Map);
     if (!templates) return;
@@ -8283,8 +8513,8 @@ describe("regression: collectTemplates paths match init directory structure (0.3
     expect(keys).toContain(".zcode/hooks/inject-subagent-context.py");
     // Workspace hook registration
     expect(keys).toContain(".zcode/config.json");
-    // agentCapable && hasHooks → start command is filtered out.
-    expect(keys).not.toContain(".zcode/commands/trellis/start.md");
+    // Opt-in engagement → the start command ships even though hasHooks=true.
+    expect(keys).toContain(".zcode/commands/trellis/start.md");
     expect(keys).toContain(".zcode/commands/trellis/finish-work.md");
     expect(keys).toContain(".zcode/commands/trellis/continue.md");
   });

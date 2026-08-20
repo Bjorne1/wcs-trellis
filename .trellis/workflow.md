@@ -106,6 +106,11 @@ python ./.trellis/scripts/get_context.py --mode phase --step <X.Y>  # detailed g
   inject-workflow-state.js (OpenCode plugin) only parse them — there is no
   fallback dict baked into the scripts after v0.5.0-rc.0.
 
+  The breadcrumb is opt-in: inject-workflow-state.py emits nothing until the
+  session runs `task.py engage` via `trellis-start` / `trellis-continue` /
+  `trellis-finish-work`. Every block below therefore speaks only to sessions
+  that asked for Trellis.
+
   STATUS charset: [A-Za-z0-9_-]+. When the hook can't find a tag, it
   degrades to a generic "Refer to workflow.md for current step." line —
   intentionally visible so users notice and fix a broken workflow.md.
@@ -118,7 +123,8 @@ python ./.trellis/scripts/get_context.py --mode phase --step <X.Y>  # detailed g
     skip and Phase 3.4 commit skip both manifested via this gap).
 
   TAG ↔ PHASE scoping:
-    [workflow-state:no_task]      → no active task; before Phase 1
+    [workflow-state:no_task]      → engaged with no active task: before
+                                    Phase 1, or after task.py finish/archive
     [workflow-state:planning]     → all of Phase 1 (status='planning')
     [workflow-state:planning-inline] → Codex inline variant of Phase 1
     [workflow-state:in_progress]  → Phase 2 + Phase 3.2-3.4
@@ -151,8 +157,9 @@ Phase 3: Finish  → verify, commit, and wrap up
 
 ### Request Triage
 
-- Do not ask whether to create a Trellis task. With no active task, work inline.
-- Create a task only when the user explicitly asks for one. The user owns the complexity judgment; do not offer, suggest, or infer it.
+- Trellis is opt-in per session. Until the user invokes `trellis-start`, `trellis-continue` or `trellis-finish-work`, no Trellis context is injected and there is nothing to route — work inline.
+- Do not ask whether to create a Trellis task, and do not offer, suggest, or infer that a request warrants one. The user owns that judgment and expresses it by invoking `trellis-start`.
+- An in-flight task from another session is not this session's task. Only `trellis-continue` adopts it.
 - Creating a task is not approval to start implementation. Planning still happens first, and every task gets the full artifact set.
 
 ### Planning Artifacts
@@ -188,14 +195,17 @@ Use child tasks for deliverables that can be planned, implemented, checked, and 
 
 Create new children with `task.py create "<title>" --slug <name> --parent <parent-dir>`. Link existing tasks with `task.py add-subtask <parent> <child>`, and unlink mistakes with `task.py remove-subtask <parent> <child>`.
 
-<!-- Per-turn breadcrumb: shown when there is no active task (before Phase 1) -->
+<!-- Per-turn breadcrumb: shown in an engaged session that has no active task —
+     either `trellis-start` has not created one yet, or `task.py finish` /
+     archive cleared the pointer mid-session. An unengaged session gets no
+     breadcrumb at all, so this block never speaks for one. -->
 
 [workflow-state:no_task]
 No active task. Work inline; create a Trellis task only when the user explicitly asks for one.
 [/workflow-state:no_task]
 
 ### Phase 1: Plan
-- 1.0 Create task `[required · once]` (only on explicit user request)
+- 1.0 Create task `[required · once]` (only on explicit user request, i.e. `trellis-start`)
 - 1.1 Requirement exploration `[required · repeatable]` (`prd.md`, `design.md`, `implement.md` — all three)
 - 1.2 Research `[optional · repeatable]` (required for `kind=bug`: this is where the repro is built)
 - 1.3 Configure context `[required · once]` — Claude Code, Cursor, OpenCode, Codex, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Snow, Reasonix, Grok, Kimi Code (sub-agent-dispatch platforms only; inline platforms skip)
@@ -336,7 +346,7 @@ Goal: turn an explicitly requested task into the planning artifacts and red evid
 
 #### 1.0 Create task `[required · once]`
 
-Create the task directory only when the user explicitly asked for a task. Do not ask whether to create one, and do not create one on your own initiative. The command sets status to `planning`, writes `task.json`, creates a default `prd.md`, and auto-targets the new task when session identity is available:
+Create the task directory only when the user explicitly asked for a task — in practice, when they invoked `trellis-start`, which owns this step. Do not ask whether to create one, and do not create one on your own initiative. The command sets status to `planning`, writes `task.json`, creates a default `prd.md`, and auto-targets the new task when session identity is available:
 
 ```bash
 python ./.trellis/scripts/task.py create "<task title>" --slug <name> --meta kind=<bug|feature|chore>
@@ -718,6 +728,7 @@ This section is for developers who want to modify the Trellis workflow itself. A
 ### Changing what a step means
 
 Edit the corresponding step's walkthrough body in the Phase 1 / 2 / 3 sections above. Critical invariants:
+- Trellis is opt-in per session: both injection hooks stay silent until an entry point runs `task.py engage`. Never move a required step's only enforcement out of the per-turn breadcrumb.
 - With no active task, never ask whether to create one. A task is created only on the user's explicit request.
 - Every task carries `prd.md`, `design.md`, and `implement.md` before start. There is no PRD-only tier.
 - `meta.kind` is never guessed, and the red-evidence gate for that kind must be satisfied — or its impossibility written down — before `task.py start`.
@@ -727,7 +738,7 @@ All tag blocks live in the `## Phase Index` section above, immediately after eac
 
 | Scope | Corresponding tag |
 |---|---|
-| No active task (before Phase 1) | `[workflow-state:no_task]` (after the Phase Index ASCII art) |
+| Engaged, no active task (before Phase 1, or after archive) | `[workflow-state:no_task]` (after the Phase Index ASCII art) |
 | All of Phase 1 (task created → ready for implementation) | `[workflow-state:planning]` (after Phase 1 summary) |
 | Codex inline Phase 1 | `[workflow-state:planning-inline]` |
 | Phase 2 + Phase 3.2–3.4 (implementation + check + wrap-up) | `[workflow-state:in_progress]` (after Phase 2 summary) |

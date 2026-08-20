@@ -13,20 +13,6 @@ import {
   getSettingsTemplate,
 } from "../templates/pi/index.js";
 
-function resolvePiCommands(): ReturnType<typeof resolveCommands> {
-  const ctx = AI_TOOLS.pi.templateContext;
-  const commands = resolveCommands(ctx);
-  if (commands.some((command) => command.name === "start")) return commands;
-
-  // Pi has extension hooks, so the shared command resolver filters `start`.
-  // Keep a manual fallback because Pi's `session_start` event cannot mutate
-  // model context; the strong startup injection happens later at agent start.
-  const start = resolveCommands({ ...ctx, hasHooks: false }).find(
-    (command) => command.name === "start",
-  );
-  return start ? [start, ...commands] : commands;
-}
-
 /**
  * The Pi file set — written at init and diffed by `trellis update`.
  */
@@ -34,7 +20,7 @@ export function collectPiTemplates(): Map<string, string> {
   const files = new Map<string, string>();
   const ctx = AI_TOOLS.pi.templateContext;
 
-  for (const command of resolvePiCommands()) {
+  for (const command of resolveCommands(ctx)) {
     files.set(`.pi/prompts/trellis-${command.name}.md`, command.content);
   }
 

@@ -231,7 +231,7 @@ describe("pi templates", () => {
     const templates = collectPiTemplates();
 
     expect(templates.get(".pi/prompts/trellis-start.md")).toContain(
-      "# Start Session",
+      "# Start Trellis Task",
     );
     expect(templates.get(".pi/prompts/trellis-continue.md")).toContain(
       "get_context.py --mode phase",

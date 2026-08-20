@@ -4,8 +4,8 @@
 No researched platform exports a session id into its shell tool's child
 process, but every hook-capable one puts that id on hook stdin. So the hook
 that fires just before a shell command writes a short-lived runtime ticket
-whenever the pending command calls `task.py start/current/finish`, and the
-task script consumes it when it has no native session environment.
+whenever the pending command calls `task.py start/current/finish/engage`, and
+the task script consumes it when it has no native session environment.
 
 Registered on whichever pre-shell event the host provides — Cursor's
 `beforeShellExecution`, Claude-shaped `PreToolUse`, Gemini's `BeforeTool` —
@@ -35,7 +35,7 @@ if callable(_stdin_reconfigure):
 DIR_WORKFLOW = ".trellis"
 DIR_RUNTIME = ".runtime"
 DIR_SHELL_TICKETS = "shell-tickets"
-SESSION_SUBCOMMANDS = {"start", "current", "finish"}
+SESSION_SUBCOMMANDS = {"start", "current", "finish", "engage"}
 TICKET_TTL_SECONDS = 30
 CONTEXT_IDENTITY_KEYS = (
     "session_id",

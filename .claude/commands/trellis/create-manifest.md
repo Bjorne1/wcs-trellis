@@ -51,14 +51,13 @@ Drop pure spec edits, mechanical refactors, and internal-only cleanup unless the
 
 ## Step 4: Draft Changelog
 
-Voice: technical reference doc. Short, clear, plain. Not a story, not a sales pitch. Follow `.trellis/spec/docs-site/docs/style-guide.md` -> "Changelog / Release Notes Voice".
+Voice: technical reference doc. Short, clear, plain. Not a story, not a sales pitch.
 
 Do:
 
 - Lead each `###` section with one sentence stating what changed. Then table, code, or bullets. Done.
 - Use feature names as headings, for example `### Joiner onboarding task`.
 - Include grep-able identifiers: file paths, function names, flag names, migration entries.
-- Mirror English and Chinese 1:1 in docs-site changelogs: same sections, same tables, same code blocks; only prose translated.
 
 Do not:
 
@@ -137,51 +136,11 @@ EOF
 
 For breaking releases with many rename entries, generate the entries with a small temporary Node script and pipe the final JSON into `create-manifest.js`.
 
-## Step 7: Create Docs-Site Changelogs
-
-This step is mandatory for every release.
-
-Create both files:
-
-1. `docs-site/changelog/v<version>.mdx`
-2. `docs-site/zh/changelog/v<version>.mdx`
-
-Use the format from recent changelog files. English and Chinese structure must match 1:1.
-
-Update `docs-site/docs.json`:
-
-- Add `"changelog/v<version>"` to the English changelog pages list at the top.
-- Add `"zh/changelog/v<version>"` to the Chinese changelog pages list at the top.
-- Update navbar changelog links to the new version.
-
-When a `<Note>` or `<Warning>` block contains a markdown list, the closing tag must start at column 0:
-
-```mdx
-<Note>
-- bullet
-</Note>
-```
-
-## Step 8: Docs Lifecycle
-
-The docs-site root path is stable. Development cycles live under `beta/` or `rc/`.
-
-| Transition | Script | When |
-|---|---|---|
-| Start a new beta | `docs-site/scripts/docs-beta-start.sh` | Before the first beta of a new minor/major, for example `0.6.0-beta.0`. |
-| Beta to RC | `docs-site/scripts/docs-beta-to-rc.sh` | Before the first rc, for example `0.6.0-rc.0`. |
-| RC to GA | `docs-site/scripts/docs-promote.sh` | Before `pnpm release:promote`. |
-
-Per-patch releases (`-beta.1`, `-rc.1`, `0.5.1`) do not run lifecycle scripts. Write changelog MDX, update `docs.json`, commit/push docs-site, then bump the main repo submodule pointer.
-
-Full reference: `.trellis/spec/docs-site/docs/release-lifecycle.md`.
-
-## Step 9: Preflight Before Release
+## Step 7: Preflight Before Release
 
 Run local verification only; do not publish locally.
 
 ```bash
-node packages/cli/scripts/check-docs-changelog.js --type <beta|rc|promote>
 node packages/cli/scripts/release-preflight.js check-versions
 node packages/cli/scripts/release-preflight.js verify-packed-cli
 node packages/cli/scripts/release-preflight.js publish-plan
@@ -190,16 +149,13 @@ pnpm typecheck
 pnpm test
 ```
 
-Skip `check-docs-changelog` only for stable patch releases where that command is not required by the release type.
-
-## Step 10: Review and Confirm
+## Step 8: Review and Confirm
 
 Verify:
 
 1. `packages/cli/src/migrations/manifests/<version>.json` exists and has valid JSON.
 2. Manifest `changelog` renders as real newlines.
-3. Both docs-site changelog MDX files exist and match 1:1.
-4. **All** submodule commits are pushed before the main repo pointer commit (currently `docs-site/` + `marketplace/`). Tag-triggered CI does `git submodule update --init --recursive` and fails on the first unpushed pointer with `fatal: remote error: upload-pack: not our ref <SHA>`. Verify with:
+3. **All** submodule commits are pushed before the main repo pointer commit (currently `marketplace/`). Tag-triggered CI does `git submodule update --init --recursive` and fails on the first unpushed pointer with `fatal: remote error: upload-pack: not our ref <SHA>`. Verify with:
 
    ```bash
    git submodule foreach 'git fetch origin -q; sha=$(git rev-parse HEAD); \
@@ -211,9 +167,9 @@ Verify:
    names, so it only finds a commit that is itself a branch or tag tip. A
    pointer to any earlier commit on `main` reports FAIL even though CI can
    fetch it fine.
-5. `@mindfoldhq/trellis` and `@mindfoldhq/trellis-core` versions still match.
+4. `@mindfoldhq/trellis` and `@mindfoldhq/trellis-core` versions still match.
 
-## Step 11: Publish Through CI
+## Step 9: Publish Through CI
 
 Use the project release script so the tag starts CI:
 

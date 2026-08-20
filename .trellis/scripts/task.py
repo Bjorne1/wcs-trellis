@@ -41,6 +41,7 @@ from common.paths import (
 )
 from common.active_task import (
     clear_active_task,
+    mark_session_engaged,
     resolve_active_task,
     resolve_context_key,
     set_active_task,
@@ -69,8 +70,35 @@ from common.task_context import (
 
 
 # =============================================================================
-# Command: start / finish
+# Command: engage / start / finish
 # =============================================================================
+
+def cmd_engage(args: argparse.Namespace) -> int:
+    """Opt this session into the Trellis workflow."""
+    repo_root = get_repo_root()
+    context_key = mark_session_engaged(repo_root)
+
+    if context_key:
+        print(colored(f"✓ Trellis engaged for this session: {context_key}", Colors.GREEN))
+        return 0
+
+    # Unlike `start`, engage has no useful degraded mode: without a persisted
+    # flag both context-injection hooks stay silent for the whole session, so
+    # every later phase would run without the per-turn breadcrumb that enforces
+    # the planning and commit gates. Fail loudly instead of half-working.
+    print(colored("Error: cannot engage — no session identity available", Colors.RED))
+    print(colored(
+        "The engaged flag is keyed by session, so without an identity the "
+        "context-injection hooks cannot tell this session opted in.",
+        Colors.YELLOW,
+    ))
+    print(colored(
+        "Hint: run inside an AI session whose hooks are active, or set "
+        "TRELLIS_CONTEXT_ID before running task.py engage.",
+        Colors.YELLOW,
+    ))
+    return 1
+
 
 def cmd_start(args: argparse.Namespace) -> int:
     """Set active task."""
@@ -464,6 +492,7 @@ Usage:
   python task.py add-context <dir> <jsonl> <path> [reason]  Add entry to jsonl
   python task.py validate <dir>                     Validate jsonl files
   python task.py list-context <dir>                 List jsonl entries
+  python task.py engage                             Opt this session into the Trellis workflow
   python task.py start <dir>                        Set active task
   python task.py current [--source]                 Show active task
   python task.py finish                             Clear active task
@@ -591,6 +620,9 @@ def main() -> int:
     p_listctx = subparsers.add_parser("list-context", help="List context entries")
     p_listctx.add_argument("dir", help="Task directory")
 
+    # engage
+    subparsers.add_parser("engage", help="Opt this session into the Trellis workflow")
+
     # start
     p_start = subparsers.add_parser("start", help="Set active task")
     p_start.add_argument("dir", help="Task directory")
@@ -668,6 +700,7 @@ def main() -> int:
         "add-context": cmd_add_context,
         "validate": cmd_validate,
         "list-context": cmd_list_context,
+        "engage": cmd_engage,
         "start": cmd_start,
         "current": cmd_current,
         "finish": cmd_finish,

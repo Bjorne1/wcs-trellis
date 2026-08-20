@@ -3,6 +3,10 @@
 """
 Codex Session Start Hook - Inject Trellis context into Codex sessions.
 
+Registered on the clear/compact matcher only (see hooks.json): compaction drops
+the workflow context an engaged session depends on, and this restores it. Emits
+nothing until the session opts in via `task.py engage`.
+
 Output format follows Codex hook protocol:
   stdout JSON → { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: "..." } }
 """
@@ -91,17 +95,6 @@ def _normalize_windows_shell_path(path_str: str) -> str:
 
 warnings.filterwarnings("ignore")
 
-FIRST_REPLY_NOTICE = """<first-reply-notice>
-On the first visible assistant reply in this session, briefly acknowledge that Trellis SessionStart context loaded.
-Choose the acknowledgment language in this order:
-1. Use the language of the user's current request (the user message that triggered this reply).
-2. If that request has no clear natural language, use an explicitly established project communication language.
-3. If neither provides a language, output the language-neutral fallback exactly: `Trellis SessionStart ✓`.
-Continue directly with the user's request after the acknowledgment.
-The acknowledgment must not alter the language used for the remainder of the response.
-This notice is one-shot: do not repeat it after the first visible assistant reply in this session.
-</first-reply-notice>"""
-
 
 def should_skip_injection() -> bool:
     if os.environ.get("TRELLIS_HOOKS") == "0":
@@ -164,6 +157,30 @@ def _resolve_context_key(project_dir: Path, hook_input: dict) -> str | None:
     except Exception:
         return None
     return resolve_context_key(hook_input, platform="codex")
+
+
+def _is_session_engaged(project_dir: Path, hook_input: dict) -> bool:
+    """Whether this Codex session opted into the Trellis workflow.
+
+    A project too old to have `is_session_engaged` (hooks updated, `.trellis/scripts`
+    not) raises ImportError. Reporting False then would make Trellis look
+    uninstalled with no way to diagnose it, so the stale-scripts case keeps the
+    old always-inject behavior and says why on stderr.
+    """
+    scripts_dir = project_dir / ".trellis" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.active_task import is_session_engaged  # type: ignore[import-not-found]
+    except ImportError:
+        print(
+            "trellis codex session-start: .trellis/scripts predates opt-in "
+            "engagement; injecting context unconditionally. Run `trellis update`.",
+            file=sys.stderr,
+        )
+        return True
+
+    return is_session_engaged(project_dir, hook_input, platform="codex")
 
 
 def _resolve_active_task(trellis_dir: Path, hook_input: dict):
@@ -505,6 +522,15 @@ def main() -> None:
     configure_project_encoding(project_dir)
 
     trellis_dir = project_dir / ".trellis"
+
+    # Context injection is opt-in: a session that never invoked `trellis-start` /
+    # `trellis-continue` / `trellis-finish-work` gets nothing. This hook is
+    # registered only on the clear/compact matcher, so reaching it in an engaged
+    # session means compaction dropped the workflow context and it is being
+    # restored.
+    if not _is_session_engaged(project_dir, hook_input):
+        sys.exit(0)
+
     spec_index_paths = _collect_spec_index_paths(trellis_dir)
 
     output = StringIO()
@@ -514,8 +540,6 @@ Trellis compact SessionStart context. Use it to orient the session; load details
 </session-context>
 
 """)
-    output.write(FIRST_REPLY_NOTICE)
-    output.write("\n\n")
 
     output.write("<current-state>\n")
     output.write(_build_compact_current_state(trellis_dir, hook_input, spec_index_paths))

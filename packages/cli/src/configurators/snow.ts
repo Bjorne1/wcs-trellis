@@ -15,7 +15,6 @@
  * Modern Snow does NOT ship `.snow/sub-agents.trellis.json` (legacy merge
  * fragment for older hosts without project-agent discovery).
  *
- * hasHooks=true → filterCommands drops `start`; SessionStart injects context.
  * Agents are written without class-2 pull-based prelude (hook inject is primary).
  */
 
@@ -72,7 +71,6 @@ export function collectSnowTemplates(): Map<string, string> {
   const ctx = config.templateContext;
   const files = new Map<string, string>();
 
-  // hasHooks=true → resolveAllAsSkills drops trellis-start.
   for (const [filePath, content] of collectSkillTemplates(
     ".snow/skills",
     resolveAllAsSkills(ctx),

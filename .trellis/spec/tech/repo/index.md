@@ -15,24 +15,24 @@ load the right guidance.
 | --- | --- | --- | --- | --- |
 | `cli` | `packages/cli` | `@mindfoldhq/trellis` | `.trellis/spec/cli/**` | User-facing CLI, templates, migrations, release scripts, and platform configurators. |
 | `core` | `packages/core` | `@mindfoldhq/trellis-core` | `.trellis/spec/core/**` | Reusable SDK/domain primitives for channel, mem, task, and testing APIs. |
-| `docs-site` | `docs-site` | `trellis-docs` | `.trellis/spec/docs-site/**` | Mintlify documentation site. This directory is a git submodule, not part of `pnpm-workspace.yaml`. |
 
 ## Workspace And Submodules
 
 - `pnpm-workspace.yaml` declares `packages/*`, so the pnpm workspace packages
   are `packages/cli` and `packages/core`.
-- `.gitmodules` declares `docs-site` and `marketplace` as submodules.
-- `docs-site` has its own package manifest and Trellis specs, so it is a
-  configured Trellis package with `type: submodule`.
+- `.gitmodules` declares `marketplace` as the only submodule. The `docs-site`
+  submodule (the public Mintlify site) was removed from this fork: it is not in
+  the pnpm workspace, not in the npm package, and nothing in `packages/` reads
+  it.
 - `marketplace` is a submodule but currently has no package manifest and no
   Trellis package-scoped specs. Do not add it to `.trellis/config.yaml` unless
   it gains package-level implementation ownership or specs.
 
 ## Contracts
 
-- `.trellis/config.yaml` uses stable Trellis package keys (`cli`, `core`,
-  `docs-site`) rather than npm package names. These keys are part of spec paths
-  and task package bindings.
+- `.trellis/config.yaml` uses stable Trellis package keys (`cli`, `core`)
+  rather than npm package names. These keys are part of spec paths and task
+  package bindings.
 - `default_package` is `cli`; new tasks without `--package` bind to CLI because
   most Trellis workflow/runtime changes are CLI-owned.
 - Existing tasks keep their frozen `task.json.package`. Changing

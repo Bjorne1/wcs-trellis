@@ -159,41 +159,6 @@ against both fresh init and upgrade paths.
 
 ---
 
-## Versioned Documentation Boundary
-
-Versioned documentation is a cross-layer boundary: source paths, `docs.json`
-version routing, and the rendered version selector must all describe the same
-release line.
-
-### Checklist: Before Editing Versioned Docs
-
-- [ ] Identify the target release line: stable, beta, or RC
-- [ ] Verify the edited MDX path matches that line:
-  - stable: `docs-site/{start,advanced,...}` and `docs-site/zh/{start,advanced,...}`
-  - beta: `docs-site/beta/**` and `docs-site/zh/beta/**`
-  - RC: `docs-site/rc/**` and `docs-site/zh/rc/**`
-- [ ] Verify `docs.json` navigation points the version label to the same paths
-- [ ] Grep the opposite tree for release-line-specific terms before committing
-- [ ] Treat beta content appearing under root release paths as a source-path bug,
-      not a rendering bug
-
-**Real-world example**: A beta-only task workflow change documented
-`prd.md` + `design.md` + `implement.md`, task-creation consent, and Codex
-mode banners under root `start/` and `advanced/` paths. The docs site then
-served 0.6 beta behavior under the Release selector. The fix was to restore root
-release docs, move the 0.6 content to `beta/` and `zh/beta/`, and add a grep
-audit for beta markers against the root release tree.
-
-**Real-world example**: Codex inline mode changed workflow platform markers from
-`[Codex]` / `[Kilo, Antigravity, Windsurf]` to `[codex-sub-agent]` /
-`[codex-inline, Kilo, Antigravity, Windsurf]`. Fresh init was correct, but
-`trellis update` only merged `[workflow-state:*]` blocks and preserved stale
-markers outside those blocks. Result: upgraded projects got new hook scripts
-but old workflow routing, so `get_context.py --mode phase --platform codex`
-could return empty Phase 2.1 detail.
-
----
-
 ## Mode-Detection Probe Checklist
 
 When a CLI auto-detects a mode by probing a remote resource (e.g., checking if `index.json` exists to decide marketplace vs direct download):

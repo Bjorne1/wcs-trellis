@@ -31,8 +31,16 @@ DIR_SHELL_TICKETS = "shell-tickets"
 # absent. The alternative (ignore it) would land its one lost command on the
 # platform that works today.
 DIR_LEGACY_CURSOR_SHELL_TICKETS = "cursor-shell"
+# Session engagement lives in its own runtime directory, NOT as a field on the
+# session file. `clear_task_from_sessions` (archive) and `clear_active_task`
+# (`task.py finish`) both *delete* the session file, which would silently
+# un-engage a session that is mid-Phase-3 — dropping the per-turn breadcrumb
+# that enforces 3.4 commit. Keeping the flag on a separate path also leaves the
+# `sessions/` file count that `_resolve_single_session_fallback` depends on
+# exactly as it was.
+DIR_ENGAGED = "engaged"
 SHELL_TICKET_TTL_SECONDS = 30
-TASK_SESSION_COMMANDS = {"start", "current", "finish"}
+TASK_SESSION_COMMANDS = {"start", "current", "finish", "engage"}
 
 _SESSION_KEYS = ("session_id", "sessionId", "sessionID")
 _CONVERSATION_KEYS = ("conversation_id", "conversationId", "conversationID")
@@ -236,6 +244,10 @@ def resolve_task_ref(task_ref: str, repo_root: Path) -> Path | None:
 
 def _runtime_sessions_dir(repo_root: Path) -> Path:
     return repo_root / DIR_WORKFLOW / DIR_RUNTIME / DIR_SESSIONS
+
+
+def _runtime_engaged_dir(repo_root: Path) -> Path:
+    return repo_root / DIR_WORKFLOW / DIR_RUNTIME / DIR_ENGAGED
 
 
 def _sanitize_key(raw: str) -> str:
@@ -615,6 +627,10 @@ def _context_path(repo_root: Path, context_key: str) -> Path:
     return _runtime_sessions_dir(repo_root) / f"{context_key}.json"
 
 
+def _engaged_path(repo_root: Path, context_key: str) -> Path:
+    return _runtime_engaged_dir(repo_root) / f"{context_key}.json"
+
+
 def resolve_active_task(
     repo_root: Path,
     platform_input: dict[str, Any] | None = None,
@@ -701,6 +717,59 @@ def _context_metadata(
         if value:
             metadata[key] = value
     return metadata
+
+
+def mark_session_engaged(
+    repo_root: Path,
+    platform_input: dict[str, Any] | None = None,
+    platform: str | None = None,
+) -> str | None:
+    """Opt this session into the Trellis workflow.
+
+    Context injection is opt-in: `session-start.py` and `inject-workflow-state.py`
+    emit nothing until a session is engaged. The user engages by invoking one of
+    the three lifecycle entry points (`trellis-start` / `trellis-continue` /
+    `trellis-finish-work`), each of which runs `task.py engage` as its first
+    step.
+
+    Returns the context key on success, or None when no session identity is
+    available. Callers must surface that as an error — reporting success without
+    a written flag would leave the hooks permanently silent and the user with no
+    way to tell why.
+    """
+    context_key = resolve_context_key(platform_input, platform)
+    if not context_key:
+        return None
+
+    engaged_path = _engaged_path(repo_root, context_key)
+    record = _read_json(engaged_path) or {}
+    record.update(_context_metadata(platform_input, platform, context_key))
+    record["engaged"] = True
+    # Re-running an entry point in the same session must not reset when the
+    # session first opted in; `last_seen_at` above already carries recency.
+    record.setdefault("engaged_at", _utc_now())
+    if not _write_json(engaged_path, record):
+        return None
+    return context_key
+
+
+def is_session_engaged(
+    repo_root: Path,
+    platform_input: dict[str, Any] | None = None,
+    platform: str | None = None,
+) -> bool:
+    """Report whether THIS session opted into the Trellis workflow.
+
+    Deliberately has no single-session fallback, unlike `resolve_active_task`:
+    inheriting engagement from a file another window left behind is exactly the
+    failure the opt-in model exists to prevent. A new session that never ran an
+    entry point must stay silent even while a task is mid-flight.
+    """
+    context_key = resolve_context_key(platform_input, platform)
+    if not context_key:
+        return False
+    record = _read_json(_engaged_path(repo_root, context_key)) or {}
+    return record.get("engaged") is True
 
 
 def set_active_task(

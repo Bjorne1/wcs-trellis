@@ -212,8 +212,8 @@ describe("omp command frontmatter", () => {
     expect(finishCmd).not.toMatch(/^---[\s\S]*?---\n\n# /);
   });
 
-  it("collectOmpTemplates does not emit a start command", () => {
+  it("collectOmpTemplates emits the start command", () => {
     const templates = collectOmpTemplates();
-    expect(templates.has(".omp/commands/trellis-start.md")).toBe(false);
+    expect(templates.has(".omp/commands/trellis-start.md")).toBe(true);
   });
 });

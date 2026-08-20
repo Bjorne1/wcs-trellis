@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Trellis per-turn breadcrumb hook (UserPromptSubmit / BeforeAgent equivalent).
 
-Runs on every user prompt. Resolves the active task through Trellis'
-session-aware active task resolver and emits a short <workflow-state>
-block reminding the main AI what task is active and its expected flow.
+Runs on every user prompt, but emits nothing until the session opts into the
+Trellis workflow by invoking `trellis-start`, `trellis-continue` or
+`trellis-finish-work` (each runs `task.py engage`). Once engaged, it resolves the
+active task through Trellis' session-aware active task resolver and emits a short
+<workflow-state> block reminding the main AI what task is active and its expected
+flow.
 
 The emitted ``hookEventName`` field is platform-aware: most hosts expect
 ``UserPromptSubmit`` (Claude Code naming, also accepted by Cursor / Qoder /
@@ -65,14 +68,6 @@ if sys.platform.startswith("win"):
             except Exception:
                 pass  # Optional Windows stream setup; keep hook startup non-fatal.
 from typing import Optional
-
-
-# Bootstrap notice for Codex while the session has no active task. Codex does not
-# get the full SessionStart overview; this short reminder points the main session
-# at the start skill once and leaves the per-turn state block compact.
-CODEX_NO_TASK_BOOTSTRAP_NOTICE = """<trellis-bootstrap>
-If you have not already loaded Trellis context this session, read the `trellis-start` skill once.
-</trellis-bootstrap>"""
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +150,30 @@ def _resolve_active_task(root: Path, input_data: dict):
     from common.active_task import resolve_active_task  # type: ignore[import-not-found]
 
     return resolve_active_task(root, input_data, platform=_detect_platform(input_data))
+
+
+def _is_session_engaged(root: Path, input_data: dict) -> bool:
+    """Whether this session opted into the Trellis workflow.
+
+    A project too old to have `is_session_engaged` (hooks updated, `.trellis/scripts`
+    not) raises ImportError. Reporting False then would silently stop the per-turn
+    breadcrumb — the one channel that enforces the planning and commit gates — so
+    the stale-scripts case keeps the old always-inject behavior and says why.
+    """
+    scripts_dir = root / ".trellis" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.active_task import is_session_engaged  # type: ignore[import-not-found]
+    except ImportError:
+        print(
+            "trellis inject-workflow-state: .trellis/scripts predates opt-in "
+            "engagement; injecting unconditionally. Run `trellis update`.",
+            file=sys.stderr,
+        )
+        return True
+
+    return is_session_engaged(root, input_data, platform=_detect_platform(input_data))
 
 
 def get_active_task(root: Path, input_data: dict) -> Optional[tuple[str, str, str]]:
@@ -443,6 +462,12 @@ def main() -> int:
     if root is None:
         return 0  # not a Trellis project
 
+    # Opt-in gate, ahead of every read below: a session that never invoked an
+    # entry point gets no breadcrumb, and does not pay the task-resolution and
+    # workflow.md reads either.
+    if not _is_session_engaged(root, data):
+        return 0
+
     config = _read_trellis_config(root)
     if prompt_has_skip_keyword(data.get("prompt", ""), _resolve_skip_keyword(config)):
         return 0  # user opted out of the per-turn breadcrumb for this turn
@@ -451,8 +476,8 @@ def main() -> int:
     platform = _detect_platform(data)
     task = get_active_task(root, data)
     if task is None:
-        # No active task — still emit a breadcrumb nudging AI toward
-        # trellis-brainstorm + task.py create when user describes real work.
+        # Engaged but no active task: either the entry point has not created one
+        # yet, or `task.py finish` / archive cleared the pointer mid-session.
         no_task_key = resolve_breadcrumb_key("no_task", platform, config)
         breadcrumb = build_breadcrumb(
             None, "no_task", templates, breadcrumb_key=no_task_key
@@ -465,12 +490,7 @@ def main() -> int:
             task_id, status, templates, source_for_breadcrumb, breadcrumb_key=status_key
         )
     if platform == "codex":
-        parts: list[str] = []
-        if task is None:
-            parts.append(CODEX_NO_TASK_BOOTSTRAP_NOTICE)
-        parts.append(_codex_mode_banner(config))
-        parts.append(breadcrumb)
-        breadcrumb = "\n\n".join(parts)
+        breadcrumb = f"{_codex_mode_banner(config)}\n\n{breadcrumb}"
 
     # Kiro (CLI userPromptSubmit / IDE promptSubmit) adds a hook's stdout
     # directly to the conversation context — no JSON envelope. Emit the bare

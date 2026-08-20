@@ -1,59 +1,68 @@
-# Start Session
+# Start Trellis Task
 
-Initialize a Trellis-managed development session. This platform has no session-start hook, so manually load the equivalent compact context by following these steps.
+Create a Trellis task for the request the user just made, then plan it. Invoking this **is** the explicit request for a task — do not ask whether the work warrants one.
+
+Context injection is opt-in: until Step 1 runs, this session receives no Trellis context at all. Run the steps in order.
 
 ---
 
-## Step 1: Current state
-Identity, git status, current task, active tasks, journal location.
+## Step 1: Engage this session
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/task.py engage
+```
+
+Marks this session as Trellis-managed, which turns on the per-turn workflow breadcrumb and re-injection after `/clear` or `/compact`.
+
+If this exits non-zero, **stop and report it**. Without the flag every later phase runs unguided, and the planning and commit gates will not be enforced.
+
+## Step 2: Load the workflow
 
 ```bash
 {{PYTHON_CMD}} ./.trellis/scripts/get_context.py
-```
-
-If this output includes a line beginning `Trellis update available:`, copy the full line verbatim when summarizing session context. Do not shorten operational command hints.
-
-## Step 2: Workflow overview
-Compact Phase Index, request triage rules, planning artifact contract, and the step-detail command.
-
-```bash
 {{PYTHON_CMD}} ./.trellis/scripts/get_context.py --mode phase
 ```
 
-Full guide in `.trellis/workflow.md` (read on demand).
+The first prints identity, git state, and any already-active tasks. The second prints the Phase Index, the planning artifact contract, and the red-evidence gate.
 
-## Step 3: Guideline indexes
-Discover packages + spec layers, then read each relevant index file.
+If the first output includes a line beginning `Trellis update available:`, relay that line verbatim to the user.
+
+If it reports a task already active in this session, do not create a second one — switch to {{CMD_REF:continue}}.
+
+## Step 3: Create the task
 
 ```bash
-{{PYTHON_CMD}} ./.trellis/scripts/get_context.py --mode packages
-cat .trellis/spec/guides/index.md
-cat .trellis/spec/<package>/<layer>/index.md   # for each relevant layer
+{{PYTHON_CMD}} ./.trellis/scripts/task.py create "<task title>" --slug <name> --meta kind=<bug|feature|chore>
 ```
 
-Index files list the specific guideline docs to read when you actually start coding.
+- `--slug` is the human-readable name only; the `MM-DD-` prefix is added for you.
+- `--meta kind=` selects the red-evidence gate: `bug` needs an executed repro with red output, `feature` needs a user-confirmed test-seam list, `chore` is exempt. **Never guess the kind** — if the request does not make it unambiguous, ask the user before running the command.
+- Run only `create`. Do not run `task.py start`; that flips status to `in_progress` and skips the planning gate. `start` belongs to Phase 1.4, after the artifacts are reviewed.
 
-## Step 4: Decide next action
-From Step 1 you know the current task and status. Check the task directory:
+Creating the task is not approval to implement.
 
-- **Active task status `planning` + no `prd.md`** → Phase 1.1. Load the `trellis-brainstorm` skill.
-- **Active task status `planning` + `prd.md` exists** → stay in Phase 1. Every task needs `design.md` + `implement.md` too, plus the red evidence its `meta.kind` requires. Load the relevant Phase 1 step detail before `task.py start`.
-- **Active task status `in_progress`** → Phase 2 step 2.1. Load the step detail:
-  ```bash
-  {{PYTHON_CMD}} ./.trellis/scripts/get_context.py --mode phase --step 2.1 --platform {{CLI_FLAG}}
-  ```
-- **No active task** → work inline. Do not ask whether to create a Trellis task; create one only when the user explicitly asks for it.
+## Step 4: Plan it
+
+Load the `trellis-brainstorm` skill and align on requirements with the user.
+
+Every task needs `prd.md`, `design.md`, and `implement.md` before `task.py start` — there is no PRD-only tier.
 
 ---
 
-## Skill routing (quick reference)
+## Where this leaves you
+
+You are in Phase 1 with status `planning`. From here the per-turn breadcrumb carries the phase rules; step detail is available with:
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/get_context.py --mode phase --step <X.Y> --platform {{CLI_FLAG}}
+```
 
 | User intent | Skill |
 |---|---|
-| New feature / unclear requirements | `trellis-brainstorm` |
+| Requirements unclear / new feature | `trellis-brainstorm` |
 | About to write code | `trellis-before-dev` |
 | Done coding / quality check | `trellis-check` |
-| Stuck / fixed same bug multiple times | `trellis-break-loop` |
-| Learned something worth capturing | `trellis-update-spec` |
+| Stuck / fixed same bug repeatedly | `trellis-break-loop` |
+| Learned something worth keeping | `trellis-update-spec` |
 
-Full rules + anti-rationalization table in `.trellis/workflow.md`.
+Full rules in `.trellis/workflow.md`.

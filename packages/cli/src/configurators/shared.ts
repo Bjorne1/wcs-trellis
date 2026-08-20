@@ -351,7 +351,6 @@ export function wrapWithOmpFrontmatter(name: string, content: string): string {
 import path from "node:path";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
-  type CommonTemplate,
   getBundledSkillTemplates,
   getCommandTemplates,
   getSkillTemplates,
@@ -375,43 +374,17 @@ export interface ResolvedSkillFile {
 }
 
 /**
- * Filter command templates based on platform capabilities.
- *
- * `start.md` is stripped only on platforms that are BOTH `agentCapable` AND
- * `hasHooks` — those platforms (Claude Code, Cursor, Kiro, Gemini, Qoder,
- * CodeBuddy, Copilot, Droid, Pi) have a SessionStart-style hook that
- * auto-injects the workflow overview, so a user-facing `start` would be
- * redundant.
- *
- * `agentCapable && !hasHooks` platforms (Codex, ZCode, OpenCode, Reasonix, Grok)
- * have no such hook (or use an out-of-band plugin), so they need the
- * user-invocable `trellis-start` skill / `start.md` command as fallback.
- * Snow is class-1 (`hasHooks: true`) with auto inject + project agents.
- * Agent-less platforms (Kilo, Antigravity, Devin) also keep `start` since
- * they rely entirely on user-triggered workflows.
- */
-function filterCommands(
-  templates: CommonTemplate[],
-  ctx: TemplateContext,
-): CommonTemplate[] {
-  if (ctx.agentCapable && ctx.hasHooks) {
-    return templates.filter((t) => t.name !== "start");
-  }
-  return templates;
-}
-
 /**
  * Resolve ALL templates as skills with trellis- prefix.
  * Used by skill-only platforms (Kiro, Qoder, Codex) where everything is a skill.
  *
- * `start` is filtered out on agent-capable platforms — the session-start hook
- * injects the workflow overview instead.
+ * Every platform gets `start`. Context injection is opt-in — the SessionStart
+ * hook emits nothing until `trellis-start` / `trellis-continue` /
+ * `trellis-finish-work` runs `task.py engage` — so the entry point is the only
+ * way in, hook or no hook.
  */
 export function resolveAllAsSkills(ctx: TemplateContext): ResolvedTemplate[] {
-  const templates = [
-    ...filterCommands(getCommandTemplates(), ctx),
-    ...getSkillTemplates(),
-  ];
+  const templates = [...getCommandTemplates(), ...getSkillTemplates()];
   return templates.map((tmpl) => ({
     name: `trellis-${tmpl.name}`,
     content: wrapWithSkillFrontmatter(
@@ -424,11 +397,9 @@ export function resolveAllAsSkills(ctx: TemplateContext): ResolvedTemplate[] {
 /**
  * Resolve command templates as plain commands (no wrapping).
  * Used by "both" platforms for the user-ritual commands.
- *
- * `start` is filtered out on agent-capable platforms.
  */
 export function resolveCommands(ctx: TemplateContext): ResolvedTemplate[] {
-  return filterCommands(getCommandTemplates(), ctx).map((tmpl) => ({
+  return getCommandTemplates().map((tmpl) => ({
     name: tmpl.name,
     content: resolvePlaceholders(tmpl.content, ctx),
   }));
@@ -467,18 +438,15 @@ export function resolveSkillsNeutral(ctx: TemplateContext): ResolvedTemplate[] {
 
 /**
  * Same as {@link resolveAllAsSkills} but uses
- * {@link resolvePlaceholdersNeutral} for the shared common skills. The 2 command
- * templates (continue, finish-work) folded into the skill set still resolve
- * `{{CLI_FLAG}}` / `{{PYTHON_CMD}}` per platform — only Codex writes those
- * files into `.agents/skills/`, so byte-identity isn't required there.
+ * {@link resolvePlaceholdersNeutral} for the shared common skills. The 3 command
+ * templates (start, continue, finish-work) folded into the skill set still
+ * resolve `{{CLI_FLAG}}` / `{{PYTHON_CMD}}` per platform — only Codex writes
+ * those files into `.agents/skills/`, so byte-identity isn't required there.
  */
 export function resolveAllAsSkillsNeutral(
   ctx: TemplateContext,
 ): ResolvedTemplate[] {
-  const templates = [
-    ...filterCommands(getCommandTemplates(), ctx),
-    ...getSkillTemplates(),
-  ];
+  const templates = [...getCommandTemplates(), ...getSkillTemplates()];
   return templates.map((tmpl) => ({
     name: `trellis-${tmpl.name}`,
     content: wrapWithSkillFrontmatter(

@@ -411,8 +411,8 @@ describe("collectPlatformTemplates", () => {
   it("copilot collectTemplates includes both tracked and discovery config files", () => {
     const result = collectPlatformTemplates("copilot");
     expect(result).toBeInstanceOf(Map);
-    // Copilot is agent-capable → start.prompt.md is not generated.
-    expect(result?.has(".github/prompts/start.prompt.md")).toBe(false);
+    // Opt-in engagement → start.prompt.md ships.
+    expect(result?.has(".github/prompts/start.prompt.md")).toBe(true);
     expect(result?.has(".github/prompts/finish-work.prompt.md")).toBe(true);
     expect(result?.has(".github/prompts/continue.prompt.md")).toBe(true);
     expect(result?.has(COPILOT_INSTRUCTIONS_PATH)).toBe(true);
@@ -447,7 +447,7 @@ describe("collectPlatformTemplates", () => {
     );
     expect(result?.has(".zcode/skills/trellis-before-dev/SKILL.md")).toBe(true);
     expect(result?.has(".zcode/skills/trellis-check/SKILL.md")).toBe(true);
-    expect(result?.has(".zcode/commands/trellis/start.md")).toBe(false);
+    expect(result?.has(".zcode/commands/trellis/start.md")).toBe(true);
     expect(result?.has(".zcode/agents/trellis-implement.md")).toBe(true);
     expect(result?.has(".zcode/agents/trellis-check.md")).toBe(true);
     expect(result?.has(".zcode/agents/trellis-research.md")).toBe(true);
