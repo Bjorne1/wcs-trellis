@@ -1393,7 +1393,7 @@ wide scope.
 | `safe_archive_paths_to_add(repo_root, task_name=None, modified_children=None)` | `templates/trellis/scripts/common/safe_commit.py:safe_archive_paths_to_add` | Path whitelist for `task.py archive` — archive subtree + explicitly-passed `modified_children` task dirs (parent/child relationship updates). Callers MUST pass `task_name`. |
 | `safe_git_add(paths, repo_root)` | `templates/trellis/scripts/common/safe_commit.py:safe_git_add` | Plain `git add -- <paths>`; never `-f`. Returns `(success, used_force=False, stderr)` |
 | `print_gitignore_warning(paths)` | `templates/trellis/scripts/common/safe_commit.py:print_gitignore_warning` | Single source of truth for the "ignored by .gitignore" warning, including the AI-defense negative example |
-| `get_session_auto_commit(repo_root)` | `templates/trellis/scripts/common/config.py:get_session_auto_commit` | Reads `session_auto_commit` from `.trellis/config.yaml` (default `True`) |
+| `get_session_auto_commit(repo_root)` | `templates/trellis/scripts/common/config.py:get_session_auto_commit` | Reads `session_auto_commit` from `.trellis/config.yaml` (default `False` since 0.7.2) |
 
 Callers using this contract: `add_session.py:_auto_commit_workspace` and
 `task_store.py:_auto_commit_archive` (invoked from `task.py archive`).
@@ -1487,24 +1487,27 @@ Behavior contract:
   compatibility but is always `False`. Do not introduce a code path that
   sets it to `True`.
 
-### Pattern: `session_auto_commit` config gate (added 0.5.11)
+### Pattern: `session_auto_commit` config gate (added 0.5.11, default flipped 0.7.2)
 
 ```yaml
 # .trellis/config.yaml
-# session_auto_commit: true   # default — auto-stage + auto-commit
-session_auto_commit: false    # files written, git left untouched
+session_auto_commit: false   # default — files written, git left untouched
+# session_auto_commit: true  # opt in to auto-stage + auto-commit
 ```
 
-- `true` (default) — `add_session.py` and `task.py archive` stage + commit
-  via the helpers above.
-- `false` — early-return before touching git. Files are still written; the
-  user runs `git status` / `git add` / `git commit` themselves.
+- `false` (default since 0.7.2) — early-return before touching git. Files are
+  still written; the user runs `git status` / `git add` / `git commit`
+  themselves.
+- `true` — `add_session.py` and `task.py archive` stage + commit via the
+  helpers above.
 - Always read via `get_session_auto_commit(repo_root)`. Do not write a custom
   YAML reader (see "Config helpers" below).
 
-`session_auto_commit: false` is the recommended escape hatch for users whose
-`.gitignore` intentionally excludes `.trellis/` and who want session data kept
-local-only.
+Why `false` is the default: `git commit` writes irreversible project history.
+A workflow scaffold must not do that on the user's behalf unless the project
+asked for it. It also makes the gitignored-`.trellis/` case a non-event —
+before 0.7.2 those users hit the "ignored by your .gitignore" warning on every
+session and had to discover this key to silence it.
 
 ### Pattern: warning text as canonical AI-defense surface
 
@@ -1802,7 +1805,7 @@ Both were fixed by deleting the custom reader and routing through
 
 ```python
 # common/config.py
-DEFAULT_SESSION_AUTO_COMMIT = True
+DEFAULT_SESSION_AUTO_COMMIT = False
 
 def get_session_auto_commit(repo_root: Path | None = None) -> bool:
     config = _load_config(repo_root)
@@ -1815,7 +1818,7 @@ def get_session_auto_commit(repo_root: Path | None = None) -> bool:
     if s in ("false", "no", "0", "off"):
         return False
     print(
-        f"[WARN] invalid session_auto_commit value: {raw!r}; using true (default)",
+        f"[WARN] invalid session_auto_commit value: {raw!r}; using false (default)",
         file=sys.stderr,
     )
     return DEFAULT_SESSION_AUTO_COMMIT
@@ -1851,14 +1854,22 @@ example in `packages/cli/src/templates/trellis/config.yaml`, with:
 - The default value commented out (so the key is discoverable but the file
   doesn't override the in-code default until the user uncuts it).
 
+**Exception — ship the key live when the default itself is the message.**
+`session_auto_commit` ships uncommented at `false` (0.7.2). A commented default
+means the reader has to parse prose to learn whether Trellis writes git history;
+for a knob that touches the user's commit history, the file itself must state
+the answer. When shipping a key live, the in-code default and the shipped value
+MUST agree — two sources of truth that disagree is the failure mode this
+convention exists to prevent.
+
 ```yaml
 # Auto-commit behavior for session journal + task archive operations.
-# - true (default): scripts auto-stage and auto-commit ...
-# - false: scripts do not touch git. Files are still written to disk; ...
+# - false (default): scripts do not touch git. Files are still written ...
+# - true: scripts auto-stage and auto-commit ...
 #
 # Accepts: true / false / yes / no / 1 / 0 / on / off (case-insensitive).
 #
-# session_auto_commit: true
+session_auto_commit: false
 ```
 
 If the key is undocumented in `config.yaml`, users discover it only by

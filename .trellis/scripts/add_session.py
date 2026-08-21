@@ -202,9 +202,9 @@ def is_git_worktree(repo_root: Path) -> bool:
 
 
 def warn_if_parallel_worktree(repo_root: Path) -> None:
-    """Non-blocking note: index.md conflicts across parallel worktrees/branches
-    are expected and safe. Only fires when running in a linked git worktree
-    (not the main tree) with `session_auto_commit` enabled (#415 quick-fix tier).
+    """Non-blocking note: workspace merge conflicts across parallel
+    worktrees/branches are expected and safe. Only fires when running in a
+    linked git worktree (not the main tree) with `session_auto_commit` enabled.
     """
     if not get_session_auto_commit(repo_root):
         return
@@ -213,10 +213,11 @@ def warn_if_parallel_worktree(repo_root: Path) -> None:
     print(
         colored(
             "[NOTE] Running in a git worktree with session_auto_commit enabled: "
-            "journal-*.md files auto-merge via .gitattributes, but index.md "
-            "conflicts across parallel worktrees/branches are expected and safe "
-            "to resolve by picking either side (task state lives in task.json, "
-            "not index.md). See .trellis/spec/cli/backend/directory-structure.md "
+            "journal-*.md and index.md conflicts across parallel "
+            "worktrees/branches are expected and safe to resolve by keeping "
+            "both sides' session blocks (task state lives in task.json, not in "
+            "the workspace files). See "
+            ".trellis/spec/cli/backend/directory-structure.md "
             '("Workspace Journal Merge Behavior").',
             Colors.YELLOW,
         ),

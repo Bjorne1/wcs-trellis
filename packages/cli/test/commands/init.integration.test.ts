@@ -84,17 +84,10 @@ describe("init() integration", () => {
   });
 
 
-  it("#1a writes .gitattributes with the journal merge=union rule (#415)", async () => {
+  it("#1a does not create a project-root .gitattributes", async () => {
     await init({ yes: true });
 
-    const gitattributes = fs.readFileSync(
-      path.join(tmpDir, ".gitattributes"),
-      "utf-8",
-    );
-    expect(gitattributes).toContain(
-      ".trellis/workspace/*/journal-*.md merge=union",
-    );
-    expect(gitattributes).not.toContain("index.md merge=union");
+    expect(fs.existsSync(path.join(tmpDir, ".gitattributes"))).toBe(false);
   });
 
   it("#1b does not print the promotional pain-point block", async () => {

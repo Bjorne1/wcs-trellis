@@ -167,7 +167,7 @@ def _next_content_line(lines: list[str], start: int) -> tuple[int, str]:
 # Defaults
 DEFAULT_SESSION_COMMIT_MESSAGE = "chore: record journal"
 DEFAULT_MAX_JOURNAL_LINES = 2000
-DEFAULT_SESSION_AUTO_COMMIT = True
+DEFAULT_SESSION_AUTO_COMMIT = False
 DEFAULT_CODEX_DISPATCH_MODE = "auto"
 
 CONFIG_FILE = "config.yaml"
@@ -220,14 +220,14 @@ def get_session_auto_commit(repo_root: Path | None = None) -> bool:
     Governs both ``add_session.py:_auto_commit_workspace`` and
     ``task_store.py:_auto_commit_archive``.
 
-    Default: ``True`` (existing behavior — auto-stage + auto-commit).
-    Set ``session_auto_commit: false`` in ``.trellis/config.yaml`` to skip
-    auto-staging entirely; the journal/archive files are still written to
-    disk, but the user manages ``git add`` / ``git commit`` themselves.
+    Default: ``False`` — the journal / archive files are written to disk and
+    git is left untouched; the user manages ``git add`` / ``git commit``.
+    Set ``session_auto_commit: true`` in ``.trellis/config.yaml`` to let the
+    scripts auto-stage and auto-commit those changes.
 
     Accepts native YAML booleans (``true`` / ``false``) and the string
     aliases ``true / false / yes / no / 1 / 0 / on / off`` (case-insensitive).
-    Invalid values fall back to ``True`` with a stderr warning.
+    Invalid values fall back to ``False`` with a stderr warning.
     """
     config = _load_config(repo_root)
     raw = config.get("session_auto_commit", DEFAULT_SESSION_AUTO_COMMIT)
@@ -239,7 +239,7 @@ def get_session_auto_commit(repo_root: Path | None = None) -> bool:
     if s in ("false", "no", "0", "off"):
         return False
     print(
-        f"[WARN] invalid session_auto_commit value: {raw!r}; using true (default)",
+        f"[WARN] invalid session_auto_commit value: {raw!r}; using false (default)",
         file=sys.stderr,
     )
     return DEFAULT_SESSION_AUTO_COMMIT

@@ -1,0 +1,9 @@
+{
+  "version": "0.7.2",
+  "description": "Patch: Trellis stops managing the project-root .gitattributes, and session_auto_commit now defaults to false.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Default behavior change:**\n- feat(scripts): `session_auto_commit` now defaults to `false` and ships **uncommented** in `.trellis/config.yaml`. Trellis no longer writes git history on your behalf: `add_session.py` and `task.py archive` still write journal / archive files to disk, then leave git alone for you to `git add` / `git commit`. Set `session_auto_commit: true` to restore auto-stage + auto-commit. A project whose `.trellis/config.yaml` still matches the bundled template picks up the new default on `trellis update`; an edited config.yaml goes through the usual modified-file prompt.\n\n**Removals:**\n- feat(cli): `trellis init` / `trellis update` no longer create or append to the project-root `.gitattributes`. The `.trellis/workspace/*/journal-*.md merge=union` rule shipped in 0.6.9 (#415) is gone: writing outside `.trellis/` to change repo-wide git merge semantics — through a path that deliberately bypassed the update conflict prompt — was the wrong boundary for a workflow scaffold, and with auto-commit off by default the journal conflicts it papered over are rare. Existing `.gitattributes` files are left exactly as they are.",
+  "migrations": [],
+  "notes": "No files are renamed or deleted — `--migrate` is not needed.\n\nTwo things to check after `trellis update`:\n1. If you relied on journal / archive auto-commit, set `session_auto_commit: true` in `.trellis/config.yaml`.\n2. Your project-root `.gitattributes` is untouched; Trellis simply stops managing it. Keep the `journal-*.md merge=union` line if you like it, or delete that block by hand. Note it is only sound while journals stay append-only."
+}

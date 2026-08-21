@@ -6416,7 +6416,16 @@ describe("regression: safe auto-commit when .trellis/ is gitignored (0.5.10 → 
     );
   }
 
-  function setupRepo(options?: { gitignoreTrellis?: boolean }): void {
+  function setupRepo(options?: {
+    gitignoreTrellis?: boolean;
+    /**
+     * When set, writes `.trellis/config.yaml` with that `session_auto_commit`
+     * value. Left unset the scripts resolve the built-in default (`false`
+     * since 0.7.2), so tests that exercise the auto-commit path must opt in
+     * explicitly.
+     */
+    sessionAutoCommit?: boolean;
+  }): void {
     writeTrellisScripts();
     writeFile(
       ".trellis/.developer",
@@ -6448,6 +6457,9 @@ describe("regression: safe auto-commit when .trellis/ is gitignored (0.5.10 → 
 
     if (options?.gitignoreTrellis) {
       writeFile(".gitignore", ".trellis/\n");
+    }
+    if (options?.sessionAutoCommit !== undefined) {
+      writeConfigYaml(`session_auto_commit: ${options.sessionAutoCommit}\n`);
     }
     // Seed an initial commit so HEAD exists.
     writeFile("README.md", "test\n");
@@ -6488,8 +6500,8 @@ describe("regression: safe auto-commit when .trellis/ is gitignored (0.5.10 → 
     return out.split("\n").filter((l) => l.length > 0);
   }
 
-  it("[gitignore-trellis] add_session warns and skips when .trellis/ is ignored (default mode)", () => {
-    setupRepo({ gitignoreTrellis: true });
+  it("[gitignore-trellis] add_session warns and skips when .trellis/ is ignored (auto-commit enabled)", () => {
+    setupRepo({ gitignoreTrellis: true, sessionAutoCommit: true });
     const { stderr } = runAddSession();
 
     // Plain add fails with "ignored by". 0.5.11 must NOT retry with -f.
@@ -6525,7 +6537,7 @@ describe("regression: safe auto-commit when .trellis/ is gitignored (0.5.10 → 
   it("[gitignore-trellis] add_session works normally when .trellis/ is NOT ignored", () => {
     // Regression guard: pre-existing behavior must not change for users
     // whose .gitignore does not exclude .trellis/.
-    setupRepo({ gitignoreTrellis: false });
+    setupRepo({ gitignoreTrellis: false, sessionAutoCommit: true });
     const { stderr } = runAddSession();
     expect(stderr).toContain("Auto-committed");
 
@@ -6551,8 +6563,8 @@ describe("regression: safe auto-commit when .trellis/ is gitignored (0.5.10 → 
     expect(safeCommit).not.toMatch(/\["add", "-f", "--",/);
   });
 
-  it("[gitignore-trellis] task.py archive warns and skips when .trellis/ is ignored (default mode)", () => {
-    setupRepo({ gitignoreTrellis: true });
+  it("[gitignore-trellis] task.py archive warns and skips when .trellis/ is ignored (auto-commit enabled)", () => {
+    setupRepo({ gitignoreTrellis: true, sessionAutoCommit: true });
     // Create a task to archive.
     writeFile(
       ".trellis/tasks/issue-500/task.json",
@@ -6725,15 +6737,46 @@ describe("regression: safe auto-commit when .trellis/ is gitignored (0.5.10 → 
     }
   });
 
-  it("[session_auto_commit] invalid value falls back to true with stderr warn", () => {
+  it("[session_auto_commit] invalid value falls back to false with stderr warn", () => {
     setupRepo({ gitignoreTrellis: false });
     writeConfigYaml("session_auto_commit: maybe\n");
 
     const { stderr } = runAddSession();
     // Warning fires.
     expect(stderr).toContain("invalid session_auto_commit value");
-    // Falls back to true → auto-commit happens.
-    expect(stderr).toContain("Auto-committed");
+    // Falls back to the default (false since 0.7.2) → git untouched.
+    expect(stderr).not.toContain("Auto-committed");
+    expect(stderr).toContain("session_auto_commit: false");
+  });
+
+  it("[session_auto_commit] defaults to false when config.yaml has no such key (0.7.2)", () => {
+    // 0.7.2 flipped DEFAULT_SESSION_AUTO_COMMIT to False: Trellis does not
+    // write git history unless the project opts in. Files still land on disk.
+    // setupRepo without `sessionAutoCommit` writes no config.yaml at all, so
+    // this exercises the built-in default.
+    setupRepo({ gitignoreTrellis: false });
+
+    const { stderr } = runAddSession();
+    expect(stderr).not.toContain("Auto-committed");
+    expect(stderr).toContain("session_auto_commit: false");
+
+    // Only the initial "init" commit exists, and nothing was staged.
+    const log = execSync("git log --oneline", {
+      cwd: tmpDir,
+      encoding: "utf-8",
+    });
+    expect(log.trim().split("\n").length).toBe(1);
+    const staged = execSync("git diff --cached --name-only", {
+      cwd: tmpDir,
+      encoding: "utf-8",
+    });
+    expect(staged.trim()).toBe("");
+
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".trellis/workspace/test-dev/journal-1.md"),
+      ),
+    ).toBe(true);
   });
 });
 
