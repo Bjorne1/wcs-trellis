@@ -2,9 +2,21 @@
 
 Resume work on the current task — pick up at the right phase/step in `.trellis/workflow.md`.
 
+Context injection is opt-in: until Step 1 runs, this session receives no Trellis context at all.
+
 ---
 
-## Step 1: Load Current Context
+## Step 1: Engage this session
+
+```bash
+python ./.trellis/scripts/task.py engage
+```
+
+Marks this session as Trellis-managed, which turns on the per-turn workflow breadcrumb and re-injection after `/clear` or `/compact`.
+
+If this exits non-zero, **stop and report it**. Without the flag the remaining phases run unguided, and the commit gate will not be enforced.
+
+## Step 2: Load Current Context
 
 ```bash
 python ./.trellis/scripts/get_context.py
@@ -12,7 +24,15 @@ python ./.trellis/scripts/get_context.py
 
 Confirms: current task, git state, recent commits.
 
-## Step 2: Load the Phase Index
+A task started in an earlier session is not automatically this session's task. If no current task is reported, ask the user which task to resume, then read its `task.json` status:
+
+```bash
+python ./.trellis/scripts/task.py list --mine
+```
+
+Re-point this session with `task.py start <task-dir>` **only** when that status is already `in_progress`. On a `planning` task `start` also flips the status, jumping the Phase 1.4 review gate — for those, work from the task directory and route by Step 4, accepting that the per-turn breadcrumb reports `no_task` until Phase 1.4 legitimately runs.
+
+## Step 3: Load the Phase Index
 
 ```bash
 python ./.trellis/scripts/get_context.py --mode phase
@@ -20,7 +40,7 @@ python ./.trellis/scripts/get_context.py --mode phase
 
 Shows the Phase Index (Plan / Execute / Finish) with routing + skill mapping.
 
-## Step 3: Decide Where You Are
+## Step 4: Decide Where You Are
 
 `get_context.py` shows the active task's `status` field. Route by `status` + artifact presence. This command replaces the user needing to remember the Trellis flow; it does not itself approve implementation.
 
@@ -39,7 +59,7 @@ Phase rules (full detail in `.trellis/workflow.md`):
 2. `[once]` steps are already done if the required output exists. Every task needs `prd.md`, `design.md`, and `implement.md`; `prd.md` alone means planning is unfinished.
 3. You may go back to an earlier phase if discoveries require it
 
-## Step 4: Load the Specific Step
+## Step 5: Load the Specific Step
 
 Once you know which step to resume at:
 

@@ -1,8 +1,3 @@
----
-name: trellis-start
-description: "Initializes an AI development session by reading workflow guides, developer identity, git status, active tasks, and project guidelines from .trellis/. Classifies incoming tasks and routes to brainstorm, direct edit, or task workflow. Use when beginning a new coding session, resuming work, starting a new task, or re-establishing project context."
----
-
 # Start Trellis Task
 
 Create a Trellis task for the request the user just made, then plan it. Invoking this **is** the explicit request for a task — do not ask whether the work warrants one.
@@ -32,7 +27,7 @@ The first prints identity, git state, and any already-active tasks. The second p
 
 If the first output includes a line beginning `Trellis update available:`, relay that line verbatim to the user.
 
-If it reports a task already active in this session, do not create a second one — switch to `continue` (Trellis command).
+If it reports a task already active in this session, do not create a second one — switch to /trellis:continue.
 
 ## Step 3: Create the task
 
@@ -59,7 +54,7 @@ Every task needs `prd.md`, `design.md`, and `implement.md` before `task.py start
 You are in Phase 1 with status `planning`. From here the per-turn breadcrumb carries the phase rules; step detail is available with:
 
 ```bash
-python ./.trellis/scripts/get_context.py --mode phase --step <X.Y> --platform codex
+python ./.trellis/scripts/get_context.py --mode phase --step <X.Y> --platform claude
 ```
 
 | User intent | Skill |

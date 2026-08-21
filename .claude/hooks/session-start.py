@@ -2,6 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 Session Start Hook - Inject structured context
+
+Emits nothing until the session opts into the Trellis workflow by invoking
+`trellis-start`, `trellis-continue` or `trellis-finish-work` (each runs
+`task.py engage`). The session-identity env bridge still runs unconditionally —
+it is plumbing, not context, and `task.py engage` depends on it.
 """
 from __future__ import annotations
 
@@ -67,38 +72,27 @@ def _normalize_windows_shell_path(path_str: str) -> str:
     return path_str
 
 
-_FIRST_REPLY_NOTICE_HEAD = """<first-reply-notice>
-On the first visible assistant reply in this session, briefly acknowledge that Trellis SessionStart context loaded."""
-
-_FIRST_REPLY_NOTICE_TAIL = """Choose the acknowledgment language in this order:
-1. Use the language of the user's current request (the user message that triggered this reply).
-2. If that request has no clear natural language, use an explicitly established project communication language.
-3. If neither provides a language, output the language-neutral fallback exactly: `Trellis SessionStart ✓`.
-Continue directly with the user's request after the acknowledgment.
-The acknowledgment must not alter the language used for the remainder of the response.
-This notice is one-shot: do not repeat it after the first visible assistant reply in this session.
-</first-reply-notice>"""
-
-FIRST_REPLY_NOTICE = f"{_FIRST_REPLY_NOTICE_HEAD}\n{_FIRST_REPLY_NOTICE_TAIL}"
-
-
-def _build_first_reply_notice(update_hint: str | None) -> str:
-    """First-reply notice, carrying the Trellis update reminder when there is one.
+def _build_update_notice(update_hint: str | None) -> str:
+    """Escalate a pending Trellis update into the visible reply.
 
     The reminder has to reach the *user*, not just the model's context — a line
     buried in SessionStart context is exactly how the update step kept getting
-    skipped. This block is already the payload's one "say it out loud" channel,
-    so the hint rides along instead of growing a second mechanism.
+    skipped. So it gets an explicit "relay this out loud" instruction rather
+    than a plain state line.
 
-    With no hint the notice is byte-identical to the plain constant: no empty
-    block, no placeholder line.
+    Emits nothing when no update is pending, which is the normal case: the block
+    exists only on the sessions that have something to report. Replaces the old
+    <first-reply-notice>, whose other job — making the AI announce that Trellis
+    context loaded — died with opt-in engagement, where the user invoked the
+    entry point and its output is the acknowledgment.
     """
     if not update_hint:
-        return FIRST_REPLY_NOTICE
+        return ""
     return (
-        f"{_FIRST_REPLY_NOTICE_HEAD}\n"
-        f"Also relay this Trellis maintenance notice on its own line in that same reply: {update_hint}\n"
-        f"{_FIRST_REPLY_NOTICE_TAIL}"
+        "<trellis-maintenance-notice>\n"
+        "Relay this Trellis maintenance notice on its own line in your next "
+        f"visible reply, verbatim: {update_hint}\n"
+        "</trellis-maintenance-notice>\n\n"
     )
 
 
@@ -160,15 +154,7 @@ def should_skip_injection() -> bool:
         return True
     non_interactive_vars = [
         "CLAUDE_NON_INTERACTIVE",
-        "QODER_NON_INTERACTIVE",
-        "CODEBUDDY_NON_INTERACTIVE",
-        "FACTORY_NON_INTERACTIVE",
-        "CURSOR_NON_INTERACTIVE",
-        "GEMINI_NON_INTERACTIVE",
-        "KIRO_NON_INTERACTIVE",
-        "COPILOT_NON_INTERACTIVE",
-        "TRAE_NON_INTERACTIVE",
-        "ZCODE_NON_INTERACTIVE",
+        "CODEX_NON_INTERACTIVE",
     ]
     return any(os.environ.get(var) == "1" for var in non_interactive_vars)
 
@@ -216,26 +202,13 @@ def _format_git_state(repo_root: Path) -> str:
 
 
 def _detect_platform(input_data: dict) -> str | None:
-    if isinstance(input_data.get("cursor_version"), str):
-        return "cursor"
-    # CLAUDE_PROJECT_DIR is a compatibility alias that several hosts set
-    # alongside their own variable — CodeBuddy, ZCode and Trae all do. It must
-    # therefore be checked LAST, or every one of them is detected as claude and
-    # the context key becomes `claude_<their-session-id>`. That key does not
-    # match the session file `task.py start` wrote under the host's real name,
-    # so every turn reports no_task while the pointer exists on disk.
-    # Observed on CodeBuddy IDE 4.10.4: session file `codebuddy_ae54840e….json`
-    # alongside marker `update-check-claude_ae54840e….marker`, same id.
+    # CLAUDE_PROJECT_DIR is a compatibility alias other hosts may also set, so
+    # it is checked last — a vendor-specific key always wins. Detecting the
+    # wrong host would build the context key `claude_<their-session-id>`, which
+    # never matches the session file `task.py start` wrote under the host's
+    # real name, and every turn would report no_task while the pointer exists.
     env_map = {
-        "ZCODE_PROJECT_DIR": "zcode",
-        "CURSOR_PROJECT_DIR": "cursor",
-        "CODEBUDDY_PROJECT_DIR": "codebuddy",
-        "FACTORY_PROJECT_DIR": "droid",
-        "GEMINI_PROJECT_DIR": "gemini",
-        "QODER_PROJECT_DIR": "qoder",
-        "KIRO_PROJECT_DIR": "kiro",
-        "COPILOT_PROJECT_DIR": "copilot",
-        "TRAE_PROJECT_DIR": "trae",
+        "CODEX_PROJECT_DIR": "codex",
         # Last: the shared alias, only meaningful once no vendor key matched.
         "CLAUDE_PROJECT_DIR": "claude",
     }
@@ -245,24 +218,8 @@ def _detect_platform(input_data: dict) -> str | None:
     script_parts = set(Path(sys.argv[0]).parts)
     if ".claude" in script_parts:
         return "claude"
-    if ".cursor" in script_parts:
-        return "cursor"
     if ".codex" in script_parts:
         return "codex"
-    if ".gemini" in script_parts:
-        return "gemini"
-    if ".qoder" in script_parts:
-        return "qoder"
-    if ".codebuddy" in script_parts:
-        return "codebuddy"
-    if ".factory" in script_parts:
-        return "droid"
-    if ".kiro" in script_parts:
-        return "kiro"
-    if ".trae" in script_parts:
-        return "trae"
-    if ".zcode" in script_parts:
-        return "zcode"
     return None
 
 
@@ -273,6 +230,35 @@ def _resolve_context_key(trellis_dir: Path, input_data: dict) -> str | None:
     from common.active_task import resolve_context_key  # type: ignore[import-not-found]
 
     return resolve_context_key(input_data, platform=_detect_platform(input_data))
+
+
+def _is_session_engaged(trellis_dir: Path, input_data: dict) -> bool:
+    """Whether this session opted into the Trellis workflow.
+
+    A project too old to have `is_session_engaged` (pre-opt-in `.trellis/scripts`,
+    e.g. an install that upgraded the hooks but not the scripts) raises ImportError
+    here. Reporting False then would make Trellis look uninstalled on every
+    session with no way to diagnose it, so the stale-scripts case keeps the old
+    always-inject behavior and says why on stderr.
+    """
+    scripts_dir = trellis_dir / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.active_task import is_session_engaged  # type: ignore[import-not-found]
+    except ImportError:
+        print(
+            "trellis session-start: .trellis/scripts predates opt-in engagement; "
+            "injecting context unconditionally. Run `trellis update`.",
+            file=sys.stderr,
+        )
+        return True
+
+    return is_session_engaged(
+        trellis_dir.parent,
+        input_data,
+        platform=_detect_platform(input_data),
+    )
 
 
 def _persist_context_key_for_bash(context_key: str | None) -> None:
@@ -853,15 +839,7 @@ def main():
     # Try platform-specific env vars, hook cwd, fallback to cwd
     project_dir_env_vars = [
         "CLAUDE_PROJECT_DIR",
-        "QODER_PROJECT_DIR",
-        "CODEBUDDY_PROJECT_DIR",
-        "FACTORY_PROJECT_DIR",
-        "CURSOR_PROJECT_DIR",
-        "GEMINI_PROJECT_DIR",
-        "KIRO_PROJECT_DIR",
-        "COPILOT_PROJECT_DIR",
-        "TRAE_PROJECT_DIR",
-        "ZCODE_PROJECT_DIR",
+        "CODEX_PROJECT_DIR",
     ]
     project_dir = None
     for var in project_dir_env_vars:
@@ -875,6 +853,21 @@ def main():
     trellis_dir = project_dir / ".trellis"
     context_key = _resolve_context_key(trellis_dir, hook_input)
     _persist_context_key_for_bash(context_key)
+
+    # Context injection is opt-in. Everything below this point costs tokens, and
+    # a session that never invoked an entry point (`trellis-start` /
+    # `trellis-continue` / `trellis-finish-work`) is not doing Trellis work — an
+    # in-flight task belonging to some other window is not consent.
+    #
+    # The env bridge above runs FIRST and unconditionally: it is the only channel
+    # by which session identity reaches `task.py` in a Bash child on Claude Code,
+    # so gating it would leave `task.py engage` unable to write the very flag
+    # this check reads.
+    #
+    # An engaged session still re-enters here on /clear and /compact, which is
+    # the point: compaction drops the workflow context a long task depends on.
+    if not _is_session_engaged(trellis_dir, hook_input):
+        sys.exit(0)
 
     # Load config for scope filtering and legacy detection
     is_mono, packages, scope_config, task_pkg, default_pkg = _load_trellis_config(
@@ -892,8 +885,7 @@ Trellis compact SessionStart context. Use it to orient the session; load details
 </session-context>
 
 """)
-    output.write(_build_first_reply_notice(_resolve_update_hint(trellis_dir, context_key)))
-    output.write("\n\n")
+    output.write(_build_update_notice(_resolve_update_hint(trellis_dir, context_key)))
 
     # Legacy migration warning
     legacy_warning = _check_legacy_spec(trellis_dir, is_mono, packages)
@@ -937,29 +929,15 @@ Context loaded. Follow <task-status>. Load workflow/spec/task details only when 
 
     context_text = output.getvalue()
 
-    # Kiro (CLI trellis agent agentSpawn) adds a hook's stdout directly to the
-    # conversation context — no JSON envelope. Emit the bare overview text.
-    # Conditionally isolated: all other platforms keep the JSON path below.
-    if _detect_platform(hook_input) == "kiro":
-        print(context_text, flush=True)
-        return
-
-    platform = _detect_platform(hook_input)
     result: dict[str, object] = {
-        # Claude Code / Qoder / CodeBuddy / Droid / Gemini / Copilot / Trae /
-        # ZCode format.
+        # Claude Code / Codex format.
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": context_text,
         },
+        # Snake_case alias for hosts that read the top-level key instead.
+        "additional_context": context_text,
     }
-    # Cursor sessionStart format (top-level snake_case per Cursor docs).
-    # ZCode reads BOTH `hookSpecificOutput.additionalContext` and top-level
-    # `additional_context` without deduplication, so emitting both keys would
-    # duplicate the context in the conversation. Keep the previous shared output
-    # shape for every other platform.
-    if platform != "zcode":
-        result["additional_context"] = context_text
 
     # Output JSON - stdout is already configured for UTF-8
     print(json.dumps(result, ensure_ascii=False), flush=True)

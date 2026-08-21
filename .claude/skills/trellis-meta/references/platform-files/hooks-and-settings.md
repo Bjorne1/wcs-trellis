@@ -17,19 +17,11 @@ Common files:
 | Platform | settings/config |
 | --- | --- |
 | Claude Code | `.claude/settings.json` |
-| Cursor | `.cursor/hooks.json` |
 | Codex | `.codex/hooks.json`, `.codex/config.toml` |
-| OpenCode | `.opencode/package.json`, `.opencode/plugins/*`, `.opencode/hooks/inject-spec-context.py` |
-| Kiro | `.kiro/hooks/` + platform config |
-| Gemini CLI | `.gemini/settings.json` |
-| Qoder | `.qoder/settings.json` |
-| CodeBuddy | `.codebuddy/settings.json` |
-| GitHub Copilot | `.github/copilot/hooks.json` |
-| Factory Droid | `.factory/settings.json` |
-| Pi Agent | `.pi/settings.json`, `.pi/extensions/trellis/` |
-| Trae IDE | `.trae/hooks.json` |
 
-Reasonix is a pull-based platform whose agent files contain prelude instructions to read context after startup. ZCode uses `.zcode/config.json` with shared hooks, including PreToolUse for sub-agent prompt injection. Kimi Code is likewise pull-based and has no project-level settings/hooks file Trellis writes (hooks live only in the user-level `~/.kimi-code/config.toml`), so its agent prompts ship as skills with the same prelude. DeepSeek Harness also has no project-level hook/settings surface Trellis writes; the optional `dsh-trellis` profile plugin supplies per-turn breadcrumbs and event-driven `trellis_wait`, while DSH role skills pull task context in both plugin and no-plugin paths.
+Codex hooks require a user-level opt-in: `[features] hooks = true` plus
+`codex_hooks = true` in `~/.codex/config.toml`. Without it, `.codex/hooks.json`
+is ignored and Trellis context is not injected.
 
 Whether these files exist in a project depends on which `trellis init --<platform>` flags the user ran.
 
