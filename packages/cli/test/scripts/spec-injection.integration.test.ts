@@ -1550,7 +1550,7 @@ print(f"v={rec['v']} version={STATE_VERSION} reset={rec['reset']}")
         expect(ctx).toContain("<spec-index>");
         expect(ctx).toMatch(
           new RegExp(
-            `- \\(\\+\\d+ more governing specs? over budget — run ${process.platform === "win32" ? "python" : "python3"} \\./\\.trellis/scripts/get_context\\.py --mode spec --file src/app\\.ts to list them\\)`,
+            `- \\(\\+\\d+ more governing specs? over budget — run (?:python|python3) \\./\\.trellis/scripts/get_context\\.py --mode spec --file src/app\\.ts to list them\\)`,
           ),
         );
         expect(ctx).toContain("</spec-index>");

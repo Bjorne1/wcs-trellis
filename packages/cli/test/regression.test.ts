@@ -3274,7 +3274,7 @@ describe("regression: current-task path normalization", () => {
 
       for (const context of [afterFailure, afterTimeout]) {
         expect(context).not.toContain("Trellis update available");
-        expect(context).toContain("<first-reply-notice>");
+        expect(context).not.toContain("<first-reply-notice>");
         expect(context).toContain("<task-status>");
       }
       // A probe that never produced an answer must not burn the marker.
@@ -6805,4 +6805,3 @@ describe("regression: .trellis/scripts stays byte-identical to templates/trellis
     });
   }
 });
-
