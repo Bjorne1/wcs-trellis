@@ -70,7 +70,13 @@ function fetchNpmVersions() {
     const output = execSync(`npm view ${PACKAGE_NAME} versions --json`, {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: 15_000,
+      // A warm registry answers in under 2s, but the first `npm view` of a
+      // session pays DNS plus npm's own startup and was measured at ~16s — so
+      // a 15s cap failed the very first release attempt every time, with an
+      // ETIMEDOUT that reads like a broken release rather than a slow network.
+      // This is a preflight network call, not a hot path; the cost of waiting
+      // is nothing next to a false failure here.
+      timeout: 60_000,
     });
     const parsed = JSON.parse(output);
     // `npm view` returns a string for single version and array otherwise.
