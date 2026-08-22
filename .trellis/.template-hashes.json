@@ -107,14 +107,14 @@
     ".agents/skills/trellis-spec-bootstrap/SKILL.md": "97bfa68c06cebb558eb4464bc1b81f7d2d56040d75baa8de1ee5ad90cca0196a",
     ".trellis/agents/implement.md": "849828224511003f3ff436b35ce675b5089b8ff999bf96b7b042c557966686ba",
     ".trellis/agents/check.md": "871d6c3c0d7bf97bff22cc1f57553b4030578fe86811ef48d395e6d463cfa20d",
-    ".trellis/config.yaml": "08f279d759cf8e85e13ab6aa3e899475d33a768e5a0dbbdef977c2f947276cb2",
+    ".trellis/config.yaml": "ea83b98f0463c1ffac4c91160163529d849cace4bb2c7b1ad0e029c04220f5a6",
     ".claude/agents/trellis-research.md": "d1e770b56e3b234fd71f3c664a609aaf1b17456fdc4ed272f745aa5ca91cad53",
     ".trellis/scripts/common/cli_adapter.py": "bda2eb3a76b3990ef979846a5eff3d8aedde9c70e0e9d128266034aeee186020",
     ".claude/skills/trellis-break-loop/SKILL.md": "f5a93699832f29dee443b53c135a7459519b371f689af191d15c29e8ee5c7bde",
     ".agents/skills/trellis-break-loop/SKILL.md": "f5a93699832f29dee443b53c135a7459519b371f689af191d15c29e8ee5c7bde",
     ".codex/hooks/inject-subagent-context.py": "f3b1d48b80debcc648230d712946616822616611b784ce6c1b685a6b6f2904f8",
     ".codex/agents/trellis-research.toml": "c4837e9f9ed296d41290e0e94d660e1061452f2b5a5e591ca4361792d70c685e",
-    ".codex/hooks/inject-spec-context.py": "2187072e0fa9c450ba29f470145eae8a27b78a4894e279570569dcbfa0eee3e5",
+    ".codex/hooks/inject-spec-context.py": "7d8d0e90e13ea6b306109e679fb8925780847cc0b0e88e2101ec7cb56084629c",
     ".claude/skills/trellis-tdd/SKILL.md": "b09e5fb5f9bf3ea25875c3cafbc5d5ce4b79ac77568449724cc1cb7eead72814",
     ".agents/skills/trellis-tdd/SKILL.md": "b09e5fb5f9bf3ea25875c3cafbc5d5ce4b79ac77568449724cc1cb7eead72814",
     ".trellis/scripts/common/spec_inject.py": "f94d33a118b2b4299467685e0adb420731ae5e7e9899f6b143b1ccbc3f4111b3",
@@ -127,7 +127,7 @@
     ".agents/skills/trellis-check/SKILL.md": "c8d17bf13ae4a49cbfeb685664e96ded01e3ed3a017b2d110c185ffd539a63a4",
     ".claude/commands/trellis/start.md": "abafbf769d9d06903bb65bbdeac73d68bf8dc551717f1af051949e60d80f8efb",
     ".trellis/scripts/common/developer.py": "b2141b0145a41f8cedb4f9a24c925796edb2f0f6fde7c86b559513ec30499368",
-    ".claude/hooks/inject-spec-context.py": "2187072e0fa9c450ba29f470145eae8a27b78a4894e279570569dcbfa0eee3e5",
+    ".claude/hooks/inject-spec-context.py": "7d8d0e90e13ea6b306109e679fb8925780847cc0b0e88e2101ec7cb56084629c",
     ".claude/skills/trellis-update-spec/SKILL.md": "2bc33e66f03028475749a521b8073f576d92e6a4b7598825dc1c429b9459fc37"
   }
 }

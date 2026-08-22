@@ -100,25 +100,28 @@ session_auto_commit: false
 # default_package: frontend
 
 #-------------------------------------------------------------------------------
-# Spec scaffolding
+# Visual design rules
 #-------------------------------------------------------------------------------
 # `spec/frontend/visual-design.md` is the one spec file Trellis ships filled in
 # rather than as a "document your conventions" stub, because visual craft rules
-# are general knowledge no codebase can state. By default it lands only where a
-# frontend layer was detected.
+# are general knowledge no codebase can state. It is installed for every project
+# type, backend-only included. This key decides whether the agent is actually
+# handed it, and is read at injection time — an edit takes effect on the next
+# tool call, with no `trellis init` and no session restart.
 #
-# - auto (default): written for a frontend or fullstack layer, skipped for a
-#   backend-only one.
-# - always: also written into `spec/frontend/` for a backend-only layer, and
-#   nothing else from `spec/frontend/` is created. Choose this when backend work
-#   in this project regularly reaches a rendered surface.
+#   auto (default)  Follow the `paths:` globs in visual-design.md's own
+#                   frontmatter: the rules arrive when the agent touches a UI
+#                   file (.tsx/.vue/.svelte/.css/...) and stay out of the way
+#                   otherwise. A frontend project is covered without doing
+#                   anything; a backend project essentially never sees it.
+#   true            Inject on every touched file, ignoring those globs. Set this
+#                   for a task that spans backend and UI, where the visible
+#                   change is driven from files the globs do not cover.
+#   false           Never inject, whatever the touched file is.
 #
-# To turn it off, delete the file. `.trellis/spec/` is a protected path, so
-# `trellis update` never writes it back.
-#
-# Read at `trellis init` time. A fresh project has no config.yaml yet, so
-# `always` takes effect from the second `trellis init` onward — set it, then
-# re-run `trellis init` to have the file appear.
+# Widening which paths count as UI is an edit to that file's `paths:` list, not
+# a setting here. `spec_injection.enabled: false` further down turns off all
+# path-scoped spec injection, this key included.
 #
 # spec:
 #   visual_design: auto

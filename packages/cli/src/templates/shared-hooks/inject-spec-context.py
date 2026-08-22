@@ -332,6 +332,123 @@ def get_spec_injection_settings(
     )
 
 
+VISUAL_DESIGN_BASENAME = "visual-design.md"
+
+
+def get_visual_design_mode(root: Path) -> str:
+    """Return the `spec.visual_design` mode: "auto" | "on" | "off".
+
+    Read here rather than at `trellis init` time, so flipping it takes effect
+    on the next tool call — the point of the key is to be turned on for one
+    cross-stack task and back off afterwards, and a scaffolding-time read could
+    not express that.
+
+        spec:
+          visual_design: auto     # follow the file's own `paths:` globs
+          # visual_design: true   # inject on every touched file
+          # visual_design: false  # never inject
+
+    Accepts the same truthy/falsy spellings as `session_auto_commit`. An
+    unrecognized value warns and falls back to "auto".
+    """
+    config = _read_trellis_config(root)
+    section = config.get("spec") if isinstance(config, dict) else None
+    if not isinstance(section, dict) or "visual_design" not in section:
+        return "auto"
+    raw = section["visual_design"]
+    if isinstance(raw, bool):
+        return "on" if raw else "off"
+    text = str(raw).strip().lower()
+    if text == "auto":
+        return "auto"
+    if text in ("true", "yes", "1", "on"):
+        return "on"
+    if text in ("false", "no", "0", "off"):
+        return "off"
+    _warn(
+        f"invalid spec.visual_design value: {raw!r}; "
+        f'expected auto / true / false. Using "auto"'
+    )
+    return "auto"
+
+
+def apply_visual_design_mode(
+    root: Path,
+    mode: str,
+    matches: list,
+    match_files: dict[str, str],
+    trigger_file: str,
+) -> list:
+    """Apply `spec.visual_design` to a path-matched spec list.
+
+    "auto" is a no-op: the file's own `paths:` globs already decided, which is
+    why a frontend project needs no configuration and a backend project is left
+    alone. "off" drops it however it matched. "on" force-appends every
+    `visual-design.md` under `.trellis/spec/` that the globs did not already
+    pull in, so a task editing only `.go` files still gets the rules.
+
+    Appended, never prepended: `assemble_payload` spends its budget in list
+    order, so a forced entry must not outrank a spec the touched path actually
+    matched. In a monorepo with one copy per package the budget degrades the
+    extra copies to index lines, which is the intended cheap outcome.
+    """
+    if mode == "auto":
+        return matches
+    if mode == "off":
+        return [
+            match
+            for match in matches
+            if not match.rel_path.endswith("/" + VISUAL_DESIGN_BASENAME)
+        ]
+
+    try:
+        from common.spec_match import (  # type: ignore[import-not-found]
+            SpecMatch,
+            parse_spec_frontmatter,
+        )
+        from common.paths import (  # type: ignore[import-not-found]
+            DIR_SPEC,
+            DIR_WORKFLOW,
+        )
+    except Exception:
+        return matches  # matcher unavailable — degrade to path-matched only
+
+    spec_dir = root / DIR_WORKFLOW / DIR_SPEC
+    if not spec_dir.is_dir():
+        return matches
+    try:
+        found = sorted(spec_dir.rglob(VISUAL_DESIGN_BASENAME))
+    except OSError as exc:
+        _warn(f"cannot scan {spec_dir} for {VISUAL_DESIGN_BASENAME}: {exc}")
+        return matches
+
+    for spec_file in found:
+        try:
+            rel_path = spec_file.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        if rel_path in match_files:
+            continue
+        description = None
+        try:
+            frontmatter = parse_spec_frontmatter(
+                spec_file.read_text(encoding="utf-8", errors="replace")
+            )
+            if frontmatter is not None:
+                description = frontmatter.description
+        except (OSError, ValueError):
+            pass  # description is cosmetic; a forced inject still carries the body
+        matches.append(
+            SpecMatch(
+                spec_path=spec_file,
+                rel_path=rel_path,
+                description=description,
+            )
+        )
+        match_files[rel_path] = trigger_file
+    return matches
+
+
 # =============================================================================
 # Identity ladder
 # =============================================================================
@@ -730,6 +847,14 @@ def main() -> int:
                 continue
             matches.append(match)
             match_files[match.rel_path] = file_path
+
+    matches = apply_visual_design_mode(
+        root,
+        get_visual_design_mode(root),
+        matches,
+        match_files,
+        file_paths[0],
+    )
     if not matches:
         return 0
 

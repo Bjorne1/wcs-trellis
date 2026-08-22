@@ -41,6 +41,13 @@ const HOOK_PATH = path.resolve(
   __dirname,
   "../../src/templates/shared-hooks/inject-spec-context.py",
 );
+// The shipped visual-design.md, used verbatim: its own `paths:` frontmatter is
+// what `spec.visual_design: auto` follows, so a hand-written fixture would test
+// globs nobody ships.
+const VISUAL_DESIGN_TEMPLATE = path.resolve(
+  __dirname,
+  "../../src/templates/markdown/spec/frontend/visual-design.md.txt",
+);
 
 function hasPython(): boolean {
   try {
@@ -1906,42 +1913,45 @@ print(f"v={rec['v']} version={STATE_VERSION} reset={rec['reset']}")
         expect(fs.existsSync(agedShard)).toBe(true);
       });
 
-      it.skipIf(process.platform === "win32")("F7: a symlinked project dir cannot walk the GC out of its own base", () => {
-        writeGoverningSpec();
+      it.skipIf(process.platform === "win32")(
+        "F7: a symlinked project dir cannot walk the GC out of its own base",
+        () => {
+          writeGoverningSpec();
 
-        const base = stateBase(tmp);
-        fs.mkdirSync(base, { recursive: true });
-        // A directory OUTSIDE the state base holding a file whose name and age
-        // both qualify for pruning — reachable only through a planted symlink
-        // that wears a conforming <project16> name.
-        const outside = path.join(tmp, "someone-elses-data");
-        fs.mkdirSync(outside, { recursive: true });
-        const victim = path.join(outside, "session_victim.jsonl");
-        fs.writeFileSync(victim, '{"v":2,"spec":"x"}\n', "utf-8");
-        const aged = new Date(Date.now() - 72 * 3600 * 1000);
-        fs.utimesSync(victim, aged, aged);
-        fs.symlinkSync(outside, path.join(base, "0123456789abcdef"), "dir");
+          const base = stateBase(tmp);
+          fs.mkdirSync(base, { recursive: true });
+          // A directory OUTSIDE the state base holding a file whose name and age
+          // both qualify for pruning — reachable only through a planted symlink
+          // that wears a conforming <project16> name.
+          const outside = path.join(tmp, "someone-elses-data");
+          fs.mkdirSync(outside, { recursive: true });
+          const victim = path.join(outside, "session_victim.jsonl");
+          fs.writeFileSync(victim, '{"v":2,"spec":"x"}\n', "utf-8");
+          const aged = new Date(Date.now() - 72 * 3600 * 1000);
+          fs.utimesSync(victim, aged, aged);
+          fs.symlinkSync(outside, path.join(base, "0123456789abcdef"), "dir");
 
-        // A same-depth directory with a foreign name is skipped by the name
-        // gate even though its shard would otherwise qualify.
-        const foreignDir = path.join(base, "not-a-project-dir");
-        fs.mkdirSync(foreignDir, { recursive: true });
-        const foreignShard = path.join(foreignDir, "session_old.jsonl");
-        fs.writeFileSync(foreignShard, '{"v":2,"spec":"x"}\n', "utf-8");
-        fs.utimesSync(foreignShard, aged, aged);
+          // A same-depth directory with a foreign name is skipped by the name
+          // gate even though its shard would otherwise qualify.
+          const foreignDir = path.join(base, "not-a-project-dir");
+          fs.mkdirSync(foreignDir, { recursive: true });
+          const foreignShard = path.join(foreignDir, "session_old.jsonl");
+          fs.writeFileSync(foreignShard, '{"v":2,"spec":"x"}\n', "utf-8");
+          fs.utimesSync(foreignShard, aged, aged);
 
-        const lastGc = path.join(base, ".last-gc");
-        fs.writeFileSync(lastGc, "", "utf-8");
-        const hoursAgo = new Date(Date.now() - 2 * 3600 * 1000);
-        fs.utimesSync(lastGc, hoursAgo, hoursAgo);
+          const lastGc = path.join(base, ".last-gc");
+          fs.writeFileSync(lastGc, "", "utf-8");
+          const hoursAgo = new Date(Date.now() - 2 * 3600 * 1000);
+          fs.utimesSync(lastGc, hoursAgo, hoursAgo);
 
-        const r = runHook(tmp, buildPayload(tmp, { filePath: EDITED }));
-        expect(r.status).toBe(0);
-        expect(additionalContext(r.stdout)).toContain("<spec-context");
+          const r = runHook(tmp, buildPayload(tmp, { filePath: EDITED }));
+          expect(r.status).toBe(0);
+          expect(additionalContext(r.stdout)).toContain("<spec-context");
 
-        expect(fs.existsSync(victim)).toBe(true);
-        expect(fs.existsSync(foreignShard)).toBe(true);
-      });
+          expect(fs.existsSync(victim)).toBe(true);
+          expect(fs.existsSync(foreignShard)).toBe(true);
+        },
+      );
     });
 
     // -----------------------------------------------------------------------
@@ -2475,6 +2485,115 @@ print(f"v={rec['v']} version={STATE_VERSION} reset={rec['reset']}")
         file: "outside.txt",
         matches: [],
       });
+    });
+  });
+
+  // ==========================================================================
+  // spec.visual_design — the runtime switch for the one spec file Trellis
+  // ships filled in. It is installed for every project type, so whether the
+  // agent is handed it has to be decided here rather than at init time: the
+  // point is to turn it on for one cross-stack task and back off after.
+  // ==========================================================================
+
+  describe("inject-spec-context.py: spec.visual_design gate", () => {
+    const VD_REL = ".trellis/spec/frontend/visual-design.md";
+    const UI_FILE = "src/App.tsx";
+    const BACKEND_FILE = "internal/api/user.go";
+
+    /** The shipped file, frontmatter and all — globs are what `auto` follows. */
+    function writeVisualDesign(): void {
+      writeSpec(
+        tmp,
+        "frontend/visual-design.md",
+        fs.readFileSync(VISUAL_DESIGN_TEMPLATE, "utf-8"),
+      );
+    }
+
+    function ctxFor(filePath: string): string {
+      const r = runHook(tmp, buildPayload(tmp, { filePath }));
+      expect(r.status).toBe(0);
+      // "nothing was injected" is an empty stdout, not a JSON envelope with an
+      // empty context, so the shared additionalContext() helper cannot parse
+      // it. Half of this gate's cases are exactly that outcome.
+      return r.stdout.trim() === "" ? "" : additionalContext(r.stdout);
+    }
+
+    it("auto: a UI file gets it, a backend file does not", () => {
+      writeVisualDesign();
+      writeConfig(tmp, ["spec:", "  visual_design: auto"]);
+
+      expect(ctxFor(UI_FILE)).toContain(`spec="${VD_REL}"`);
+      expect(ctxFor(BACKEND_FILE)).not.toContain(VD_REL);
+    });
+
+    it("auto is also the default when the key is absent entirely", () => {
+      writeVisualDesign();
+      writeConfig(tmp, ["session_auto_commit: false"]);
+
+      expect(ctxFor(UI_FILE)).toContain(`spec="${VD_REL}"`);
+      expect(ctxFor(BACKEND_FILE)).not.toContain(VD_REL);
+    });
+
+    it("true: a backend file gets it too, which is the cross-stack task case", () => {
+      writeVisualDesign();
+      writeConfig(tmp, ["spec:", "  visual_design: true"]);
+
+      const ctx = ctxFor(BACKEND_FILE);
+      expect(ctx).toContain(`spec="${VD_REL}"`);
+      // Forced inject carries the real body, not just an index line — a
+      // pointer the agent has to go read would defeat the switch.
+      expect(ctx).toContain("Absolute Bans");
+    });
+
+    it("false: even a UI file does not get it", () => {
+      writeVisualDesign();
+      writeConfig(tmp, ["spec:", "  visual_design: false"]);
+
+      expect(ctxFor(UI_FILE)).not.toContain(VD_REL);
+    });
+
+    it("true does not suppress or outrank a spec the touched path really matched", () => {
+      // The forced entry is appended, so budget order still favours the spec
+      // whose globs actually cover the edited file.
+      writeVisualDesign();
+      writeSpec(
+        tmp,
+        "cli/backend.md",
+        [
+          "---",
+          "description: go conventions",
+          "paths:",
+          "  - internal/**",
+          "---",
+          "Go body here.",
+          "",
+        ].join("\n"),
+      );
+      writeConfig(tmp, ["spec:", "  visual_design: true"]);
+
+      const ctx = ctxFor(BACKEND_FILE);
+      expect(ctx).toContain(".trellis/spec/cli/backend.md");
+      expect(ctx).toContain(`spec="${VD_REL}"`);
+      expect(ctx.indexOf("cli/backend.md")).toBeLessThan(ctx.indexOf(VD_REL));
+    });
+
+    it("an unknown value warns and behaves as auto", () => {
+      writeVisualDesign();
+      writeConfig(tmp, ["spec:", "  visual_design: sometimes"]);
+
+      const r = runHook(tmp, buildPayload(tmp, { filePath: BACKEND_FILE }));
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain("invalid spec.visual_design value");
+      expect(ctxFor(BACKEND_FILE)).not.toContain(VD_REL);
+      // Paired positive: auto still delivers on a UI file, so the fallback is
+      // really auto and not a silent off.
+      expect(ctxFor(UI_FILE)).toContain(`spec="${VD_REL}"`);
+    });
+
+    it("true is inert when the file was deleted from this project", () => {
+      writeConfig(tmp, ["spec:", "  visual_design: true"]);
+
+      expect(ctxFor(BACKEND_FILE)).toBe("");
     });
   });
 });

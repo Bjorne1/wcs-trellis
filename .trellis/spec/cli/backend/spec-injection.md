@@ -256,8 +256,10 @@ read+hashed — it degrades straight to an index line with a stderr warn.
 8. Import `common.spec_match` + `common.spec_inject` from `.trellis/scripts`
    (sys.path extension); import failure → degrade to nothing.
 9. Match every extracted file. A governing spec that matches multiple files
-   in one patch appears once, attributed to its first matching file. No
-   matches → silent exit.
+   in one patch appears once, attributed to its first matching file.
+   `spec.visual_design` (§6) then post-processes that list: `off` drops
+   `visual-design.md`, `on` appends every copy under `.trellis/spec/` the
+   globs missed, `auto` is a no-op. No matches → silent exit.
 10. Resolve the base session identity and agent-specific emission identity;
     unless stateless: run GC (hourly gate), read the latest reset marker from
     the base shard, then open the emission identity's state shard for
@@ -588,6 +590,9 @@ sanitized — is unforgeable.
 ## 6. Config keys (`.trellis/config.yaml`)
 
 ```yaml
+spec:
+  visual_design: auto # auto | true | false — see below
+
 spec_injection:
   enabled: true # false disables push injection entirely
   max_spec_chars: 9400 # per matched spec file; 0 = unlimited
@@ -625,6 +630,34 @@ spec_injection:
   costs.
 
 ---
+
+### `spec.visual_design`
+
+The one shipped spec file with `paths:` frontmatter is
+`spec/frontend/visual-design.md`, installed for every project type including
+backend-only. This key decides whether the agent is handed it, and is read on
+every injection event so flipping it takes effect on the next tool call — the
+key exists to be turned on for one cross-stack task and off again, which a
+scaffolding-time read could not express.
+
+| Value            | Behavior                                                                          |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `auto` (default) | No-op. The file's own `paths:` globs decide, so a frontend project needs no config and a backend project is left alone. |
+| `true`           | Force-append every `visual-design.md` under `.trellis/spec/` the globs did not already match. |
+| `false`          | Drop `visual-design.md` however it matched.                                       |
+
+Implemented by `get_visual_design_mode()` + `apply_visual_design_mode()` in the
+hook, not in `spec_match.py`: the matcher stays a pure path→spec function and
+the Trellis-specific policy lives with the config reader. Accepts the same
+truthy/falsy spellings as `session_auto_commit`; an unrecognized value warns to
+stderr and falls back to `auto`.
+
+Force-appended entries go at the **end** of the match list. `assemble_payload`
+spends its budget in list order, so a forced entry must never outrank a spec
+whose globs actually cover the edited file. In a monorepo carrying one copy per
+package, the budget degrades the extra copies to `<spec-index>` lines — the
+intended cheap outcome, not a bug. `spec_injection.enabled: false` still wins
+over all three values.
 
 ## 7. Pull mode (`get_context.py --mode spec`)
 

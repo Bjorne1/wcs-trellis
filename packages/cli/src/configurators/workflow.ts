@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 
 import { DIR_NAMES, PATHS } from "../constants/paths.js";
@@ -50,64 +49,6 @@ interface DocDefinition {
   content: string;
 }
 
-/** How `spec/frontend/visual-design.md` is scaffolded. See config.yaml. */
-export type VisualDesignMode = "auto" | "always";
-
-/**
- * Read `spec.visual_design` from `.trellis/config.yaml`.
- *
- * `createWorkflowStructure` writes config.yaml before it writes spec, and
- * `writeFile` preserves an existing config, so on a re-init this reads the
- * user's own file. A first init has no config yet and gets `auto`.
- *
- * Hand-parsed for the same reason `loadUpdateSkipPaths` in `commands/update.ts`
- * is: config.yaml is read in several places without a YAML dependency.
- *
- * @internal Exported for testing only
- */
-export function loadVisualDesignMode(cwd: string): VisualDesignMode {
-  const configPath = path.join(cwd, DIR_NAMES.WORKFLOW, "config.yaml");
-  if (!fs.existsSync(configPath)) return "auto";
-
-  let raw: string | null = null;
-  try {
-    const lines = fs.readFileSync(configPath, "utf-8").split("\n");
-    let inSpec = false;
-    for (const line of lines) {
-      if (/^spec:\s*(#.*)?$/.test(line)) {
-        inSpec = true;
-        continue;
-      }
-      // A non-indented, non-comment, non-blank line closes the block.
-      if (inSpec && /^\S/.test(line) && !line.startsWith("#")) {
-        inSpec = false;
-      }
-      if (!inSpec) continue;
-      const match = /^\s+visual_design:\s*([^#]+)/.exec(line);
-      if (match) {
-        raw = match[1]
-          .trim()
-          .replace(/^['"]|['"]$/g, "")
-          .toLowerCase();
-        break;
-      }
-    }
-  } catch {
-    console.warn(
-      `Warning: failed to read ${configPath}, using spec.visual_design: auto`,
-    );
-    return "auto";
-  }
-
-  if (raw === null || raw === "auto") return "auto";
-  if (raw === "always") return "always";
-  console.warn(
-    `Warning: unknown spec.visual_design value "${raw}" in ${configPath}; ` +
-      `expected "auto" or "always". Using "auto".`,
-  );
-  return "auto";
-}
-
 /**
  * Options for creating workflow structure
  */
@@ -152,11 +93,6 @@ export async function createWorkflowStructure(
   const packages = options?.packages;
   const remoteSpecPackages = options?.remoteSpecPackages;
   const workflowMd = options?.workflowMdOverride ?? workflowMdTemplate;
-
-  // Read before this function writes config.yaml. `--force` overwrites the
-  // user's config with the template, so reading it later would silently reset
-  // the choice to `auto` on exactly the run that rewrites the files.
-  const visualDesignMode = loadVisualDesignMode(cwd);
 
   // Create base .trellis directory
   ensureDir(path.join(cwd, DIR_NAMES.WORKFLOW));
@@ -209,16 +145,10 @@ export async function createWorkflowStructure(
   // These are NOT dogfooded - they are generic templates for new projects
   if (packages && packages.length > 0) {
     // Monorepo mode: create per-package spec directories
-    await createSpecTemplates(
-      cwd,
-      projectType,
-      visualDesignMode,
-      packages,
-      remoteSpecPackages,
-    );
+    await createSpecTemplates(cwd, projectType, packages, remoteSpecPackages);
   } else if (!skipSpecTemplates) {
     // Single-repo mode: create global spec (skip if using remote template)
-    await createSpecTemplates(cwd, projectType, visualDesignMode);
+    await createSpecTemplates(cwd, projectType);
   }
 }
 
@@ -283,7 +213,6 @@ async function writeFrontendDocs(specBase: string): Promise<void> {
 async function writeSpecForType(
   specBase: string,
   projectType: ProjectType,
-  visualDesignMode: VisualDesignMode,
 ): Promise<void> {
   if (projectType !== "frontend") {
     await writeBackendDocs(specBase);
@@ -292,25 +221,22 @@ async function writeSpecForType(
     await writeFrontendDocs(specBase);
     return;
   }
-  if (visualDesignMode === "always") {
-    // Backend-only layer, but the user asked for the visual craft rules
-    // anyway — backend work in this project reaches rendered surfaces. Only
-    // this one file: every other `frontend/` doc is an unfilled stub, so
-    // creating them would add noise the layer has no use for. The backend
-    // index points here whenever the file exists.
-    const frontendDir = path.join(specBase, "frontend");
-    ensureDir(frontendDir);
-    await writeFile(
-      path.join(frontendDir, "visual-design.md"),
-      frontendVisualDesignContent,
-    );
-  }
+  // Backend-only layer still gets visual-design.md, and only that file: a
+  // backend task can span into UI work, and whether the agent is actually
+  // handed the rules is decided at runtime by `spec.visual_design` (read by
+  // inject-spec-context.py), not by what init chose to write. Every other
+  // `frontend/` doc is an unfilled stub a backend layer has no use for.
+  const frontendDir = path.join(specBase, "frontend");
+  ensureDir(frontendDir);
+  await writeFile(
+    path.join(frontendDir, "visual-design.md"),
+    frontendVisualDesignContent,
+  );
 }
 
 async function createSpecTemplates(
   cwd: string,
   projectType: ProjectType,
-  visualDesignMode: VisualDesignMode,
   packages?: DetectedPackage[],
   remoteSpecPackages?: Set<string>,
 ): Promise<void> {
@@ -343,14 +269,10 @@ async function createSpecTemplates(
       const pkgSpecBase = path.join(cwd, `${PATHS.SPEC}/${dirName}`);
       ensureDir(pkgSpecBase);
       const pkgType = pkg.type === "unknown" ? "fullstack" : pkg.type;
-      await writeSpecForType(pkgSpecBase, pkgType, visualDesignMode);
+      await writeSpecForType(pkgSpecBase, pkgType);
     }
   } else {
     // Single-repo mode
-    await writeSpecForType(
-      path.join(cwd, PATHS.SPEC),
-      projectType,
-      visualDesignMode,
-    );
+    await writeSpecForType(path.join(cwd, PATHS.SPEC), projectType);
   }
 }

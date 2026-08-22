@@ -50,7 +50,6 @@ import { init } from "../../src/commands/init.js";
 import { VERSION } from "../../src/constants/version.js";
 import { DIR_NAMES, FILE_NAMES, PATHS } from "../../src/constants/paths.js";
 import { computeHash } from "../../src/utils/template-hash.js";
-import { frontendVisualDesignContent } from "../../src/templates/markdown/index.js";
 import { execSync } from "node:child_process";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -251,7 +250,7 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(specDir, "guides", "index.md"))).toBe(true);
   });
 
-  it("#11 backend project init skips frontend spec templates", async () => {
+  it("#11 backend project init skips the frontend spec stubs", async () => {
     // go.mod triggers detectProjectType → "backend"
     fs.writeFileSync(path.join(tmpDir, "go.mod"), "module example.com/app\n");
 
@@ -259,7 +258,14 @@ describe("init() integration", () => {
 
     const specDir = path.join(tmpDir, PATHS.SPEC);
     expect(fs.existsSync(path.join(specDir, "backend", "index.md"))).toBe(true);
-    expect(fs.existsSync(path.join(specDir, "frontend"))).toBe(false);
+    // `frontend/` is no longer absent: visual-design.md ships for every project
+    // type (#12a). What a backend layer still skips is the to-fill stubs.
+    expect(fs.existsSync(path.join(specDir, "frontend", "index.md"))).toBe(
+      false,
+    );
+    expect(
+      fs.existsSync(path.join(specDir, "frontend", "component-guidelines.md")),
+    ).toBe(false);
     expect(fs.existsSync(path.join(specDir, "guides", "index.md"))).toBe(true);
   });
 
@@ -280,22 +286,26 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(specDir, "guides", "index.md"))).toBe(true);
   });
 
-  it("#12a visual-design.md ships filled in and only for frontend-bearing projects", async () => {
+  it("#12a visual-design.md is installed for a backend-only project too", async () => {
     // go.mod triggers detectProjectType → "backend"
     fs.writeFileSync(path.join(tmpDir, "go.mod"), "module example.com/app\n");
 
     await init({ yes: true });
 
     const specDir = path.join(tmpDir, PATHS.SPEC);
-    // A backend-only project must not pay for visual design rules at all.
-    expect(
-      fs.existsSync(path.join(specDir, "frontend", "visual-design.md")),
-    ).toBe(false);
+    const frontendDir = path.join(specDir, "frontend");
 
-    // Paired positives, so the assertion above cannot pass for the wrong
-    // reason. On its own it also holds when init silently wrote nothing, or
-    // when the template was deleted outright — neither of which is gating.
-    expect(frontendVisualDesignContent).toContain("Absolute Bans");
+    // A backend task can span into UI work, so the rules ship regardless of
+    // detected type. Whether the agent is handed them is `spec.visual_design`,
+    // decided at injection time — not by what init chose to write.
+    expect(fs.existsSync(path.join(frontendDir, "visual-design.md"))).toBe(
+      true,
+    );
+
+    // And only that file: every other frontend/ doc is an unfilled stub a
+    // backend layer has no use for.
+    expect(fs.readdirSync(frontendDir)).toEqual(["visual-design.md"]);
+
     expect(fs.existsSync(path.join(specDir, "backend", "index.md"))).toBe(true);
 
     // Same dead-end risk as the frontend index: trellis-before-dev and
@@ -307,37 +317,31 @@ describe("init() integration", () => {
     );
     expect(backendIndex).toContain("## Pre-Development Checklist");
     expect(backendIndex).toContain("## Quality Check");
-    // Existence-conditional pointer: the only way a backend-only layer reaches
-    // visual-design.md when `spec.visual_design: always` puts it there.
     expect(backendIndex).toContain("../frontend/visual-design.md");
   });
 
-  it("#12c spec.visual_design: always adds visual-design.md to a backend-only project, and nothing else", async () => {
+  it("#12c visual-design.md ships the paths: frontmatter that spec.visual_design: auto follows", async () => {
     fs.writeFileSync(path.join(tmpDir, "go.mod"), "module example.com/app\n");
 
-    // First init creates config.yaml; the knob is only readable from then on.
-    await init({ yes: true });
-    const configPath = path.join(tmpDir, PATHS.WORKFLOW, "config.yaml");
-    fs.appendFileSync(configPath, "\nspec:\n  visual_design: always\n");
-
-    // -y implies skip mode, so the edited config survives the re-init.
     await init({ yes: true });
 
-    const frontendDir = path.join(tmpDir, PATHS.SPEC, "frontend");
-    const visualDesign = path.join(frontendDir, "visual-design.md");
-    expect(fs.existsSync(visualDesign)).toBe(true);
-    expect(fs.readFileSync(visualDesign, "utf-8")).toContain("Absolute Bans");
-
-    // Only that one file. The rest of frontend/ would be unfilled stubs a
-    // backend layer has no use for, so pulling them in would be the noise this
-    // knob exists to avoid.
-    expect(fs.readdirSync(frontendDir)).toEqual(["visual-design.md"]);
-
-    // Paired negative control: without the knob the same project gets nothing
-    // (that is #12a), so this assertion cannot be passing by default.
-    expect(fs.readFileSync(configPath, "utf-8")).toContain(
-      "visual_design: always",
+    const content = fs.readFileSync(
+      path.join(tmpDir, PATHS.SPEC, "frontend", "visual-design.md"),
+      "utf-8",
     );
+    // Without frontmatter starting on line 1, spec_match skips the file and
+    // `auto` can never deliver it — the switch would be dead on arrival.
+    expect(content.startsWith("---\n")).toBe(true);
+    expect(content).toContain("\npaths:\n");
+    expect(content).toContain('"**/*.tsx"');
+    expect(content).toContain('"**/*.css"');
+
+    // config.yaml has to document the key, or the switch is undiscoverable.
+    const config = fs.readFileSync(
+      path.join(tmpDir, PATHS.WORKFLOW, "config.yaml"),
+      "utf-8",
+    );
+    expect(config).toContain("visual_design: auto");
   });
 
   it("#12b visual-design.md arrives with real rules, not a to-fill stub", async () => {

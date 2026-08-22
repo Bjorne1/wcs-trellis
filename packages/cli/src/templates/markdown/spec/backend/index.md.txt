@@ -26,7 +26,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 
 Read before writing backend code. `trellis-before-dev` follows this section.
 
-1. **Read the conventions that apply** — the files above covering the layers this change touches, plus `.trellis/spec/guides/` for the cross-cutting thinking guides. When the change reaches a rendered surface and `../frontend/visual-design.md` exists, read that too.
+1. **Read the conventions that apply** — the files above covering the layers this change touches, plus `.trellis/spec/guides/` for the cross-cutting thinking guides. When the change reaches a rendered surface, read `../frontend/visual-design.md` too — it ships in every project, backend-only included.
 2. **State the change boundary.** The smallest behavior gap between what happens now and what should happen; where that behavior actually lives (not where it is easiest to intercept); which files you expect to change and why each is necessary; what you are explicitly not doing.
 3. **Name the contract you are about to touch.** Any change to a public function signature, HTTP route, event payload, database schema, or config key has callers. Find them before editing, not after.
 4. **Decide where the test will sit** before writing code, on a boundary that survives a refactor of the implementation behind it.
@@ -45,7 +45,7 @@ Run before reporting a backend change complete. `trellis-check` follows this sec
 - [ ] Errors are propagated or handled deliberately, never swallowed. No debug logging left behind.
 - [ ] No credential, token, or personal data in logs, error messages, or committed fixtures.
 - [ ] Migrations run forward on a copy of real-shaped data, and the rollback path is known.
-- [ ] A change that reached a rendered surface was verified against `../frontend/visual-design.md` → **Verification**, which owns the render rules and the no-renderer fallback. Skip this line where that file does not exist in this project.
+- [ ] A change that reached a rendered surface was verified against `../frontend/visual-design.md` → **Verification**, which owns the render rules and the no-renderer fallback. For a task that spans backend and UI, `spec.visual_design: true` in `.trellis/config.yaml` makes those rules arrive on every file you touch.
 
 Replace and extend these with your project's actual gates — the real verification commands, the real risky areas.
 

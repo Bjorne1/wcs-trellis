@@ -1,10 +1,30 @@
+---
+name: visual-design
+description: Typography, color, motion, surfaces, banned patterns, render verification
+paths:
+  - "**/*.tsx"
+  - "**/*.jsx"
+  - "**/*.vue"
+  - "**/*.svelte"
+  - "**/*.astro"
+  - "**/*.css"
+  - "**/*.scss"
+  - "**/*.sass"
+  - "**/*.less"
+  - "**/*.styl"
+  - "**/*.html"
+  - "**/tailwind.config.*"
+---
+
 # Visual Design Rules
 
 > **This file ships filled in.** Unlike its siblings in this directory, it is not a "document your project's conventions" stub. These rules are general craft knowledge that a codebase cannot tell you — no config file states which typefaces read as unconsidered, and no linter catches a purple-to-blue gradient. Delete or override any rule your project has deliberately decided against, and record the reason where you override it.
 >
 > Project-specific token values (your palette, your type scale, your radius scale) belong in a `DESIGN.md`-style section you add at the bottom, or in `component-guidelines.md`. This file holds the rules that hold regardless of project.
 >
-> **Scope and shelf life.** Written for web UI: the mechanisms named are CSS, and a React Native / Flutter / desktop-toolkit surface should read the intent and ignore the syntax. Two kinds of content here decay — the browser baselines under Motion, and the typeface list under Typography — so treat both as "true when written" and re-check before leaning on them. Rules as of Trellis 0.7.3 (2026-08).
+> **Scope and shelf life.** Written for web UI: the mechanisms named are CSS, and a React Native / Flutter / desktop-toolkit surface should read the intent and ignore the syntax. Two kinds of content here decay — the browser baselines under Motion, and the typeface list under Typography — so treat both as "true when written" and re-check before leaning on them. Rules as of Trellis 0.7.4 (2026-08).
+>
+> **When you get this file.** The `paths:` globs above are what `spec.visual_design: auto` follows — touch one of those files and these rules arrive on that tool call. Add your own globs if this project keeps UI somewhere they miss (a Go template dir, a Rails view path, a design-token package). `spec.visual_design: true` in `.trellis/config.yaml` ignores the globs and injects on every file, which is the switch for a task that spans backend and UI; `false` turns it off entirely.
 
 ---
 

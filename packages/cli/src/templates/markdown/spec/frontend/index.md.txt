@@ -8,7 +8,7 @@
 
 This directory contains guidelines for frontend development. Fill in each file with your project's specific conventions.
 
-One file is the exception: `visual-design.md` ships filled in, because visual craft rules are general knowledge no codebase can state. Read it as-is; override a rule where your project has decided against it.
+One file is the exception: `visual-design.md` ships filled in, because visual craft rules are general knowledge no codebase can state. Read it as-is; override a rule where your project has decided against it. It is also the one spec file that carries `paths:` frontmatter, so it arrives on its own when you touch a UI file — `spec.visual_design` in `.trellis/config.yaml` is the switch.
 
 ---
 
