@@ -11,6 +11,10 @@ Red evidence is one command you have **already executed** that goes red on the e
 
 A lint pass, a successful build, or a green type-check is not red evidence. None of them can observe the behavior in question.
 
+**Authorization**: building the loop, reproducing, minimising, and hypothesising are report-only. Writing production code needs the current turn to ask for a fix — a request to reproduce or diagnose is not one. The red evidence is required either way.
+
+**Done when**: the red command has been run and its redacted output recorded in the artifact named under Recording the Evidence; and, for a fix, that same command has been re-run against the original scenario and observed green.
+
 ---
 
 ## Which Path Applies

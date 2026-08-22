@@ -57,10 +57,6 @@ import {
 import { VERSION } from "../../src/constants/version.js";
 import { DIR_NAMES, FILE_NAMES, PATHS } from "../../src/constants/paths.js";
 import { computeHash } from "../../src/utils/template-hash.js";
-import {
-} from "../../src/templates/copilot/index.js";
-import {
-} from "../../src/configurators/shared.js";
 
 // A managed template file that update always handles (Python script)
 const MANAGED_FILE = `${PATHS.SCRIPTS}/get_context.py`;

@@ -4,6 +4,29 @@
 # All values have sensible defaults. Only override what you need.
 
 #-------------------------------------------------------------------------------
+# Update behavior (this repository only — not part of the shipped template)
+#-------------------------------------------------------------------------------
+# `.trellis/scripts/` here is Trellis's own dogfood twin of
+# `packages/cli/src/templates/trellis/scripts/`, and `regression.test.ts`
+# ("regression: .trellis/scripts stays byte-identical...") is what keeps the two
+# in sync. Letting `trellis update` also write this tree gives it a second,
+# platform-dependent source of truth: `copyTrellisDir` renders `python3` to the
+# host's Python command, so every `trellis update` on Windows rewrites these
+# files, dirties the worktree, and — before the test learned to normalize —
+# committed a Windows-only `developer.py` that broke CI on Linux.
+#
+# So the dogfood tree is maintained by hand and enforced by that test, never by
+# update. A template script change that is not mirrored here fails the build
+# immediately, which is the intended signal.
+#
+# This block belongs to this repository alone. A normal user project wants
+# `trellis update` to manage `.trellis/scripts/` — do not copy this into the
+# shipped `config.yaml` template.
+update:
+  skip:
+    - .trellis/scripts
+
+#-------------------------------------------------------------------------------
 # Session Recording
 #-------------------------------------------------------------------------------
 
@@ -19,18 +42,18 @@ max_journal_lines: 2000
 #-------------------------------------------------------------------------------
 
 # Auto-commit behavior for session journal + task archive operations.
-# - true (default): scripts auto-stage and auto-commit journal / task changes
-#   after add_session.py / task.py archive runs.
-# - false: scripts do not touch git. Files (journal-*.md, task archive moves)
-#   are still written to disk; you decide whether to git add / commit.
+# - false (default): scripts do not touch git. Files (journal-*.md, task archive
+#   moves) are still written to disk; you decide whether to git add / commit.
+# - true: scripts auto-stage and auto-commit journal / task changes after
+#   add_session.py / task.py archive runs.
 #
-# Use `false` if your project's .gitignore intentionally excludes `.trellis/`
-# and you want session data kept local-only, or if you prefer to review
-# staged changes manually before each commit.
+# Use `true` if you want session records to land in git without extra steps.
+# With `true` and parallel worktrees/branches, journal-*.md and index.md merges
+# can conflict; resolve by keeping both sides' session blocks.
 #
 # Accepts: true / false / yes / no / 1 / 0 / on / off (case-insensitive).
 #
-# session_auto_commit: true
+session_auto_commit: false
 
 #-------------------------------------------------------------------------------
 # Task Lifecycle Hooks

@@ -370,7 +370,8 @@ Python scripts run at user-project runtime and can't import from the TS `AI_TOOL
 
 **Repo-global, not Codex-specific**: the shipped script tree
 (`packages/cli/src/templates/trellis/scripts/`) and Trellis's own dogfood copy
-(`.trellis/scripts/`) must stay byte-identical. This is now build-enforced —
+(`.trellis/scripts/`) must stay in sync, compared after the Python-command
+rendering both sides get normalized through. This is now build-enforced —
 see `script-conventions.md` → "Two script trees, one content".
 
 ### Scenario: Codex Native `SubagentStart` Context Delivery

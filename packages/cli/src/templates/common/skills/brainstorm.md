@@ -89,6 +89,33 @@ Do not manufacture clarification questions when the request and repository evide
 
 The final review is a required phase-transition gate, not a prohibited process question. The user's task request, the initial implementation request, and approval given before the latest final summary do not satisfy this gate.
 
+## Decisions Prose Cannot Settle
+
+Some decisions are neither facts you can look up nor questions a round of prose can settle: what a screen should look like, whether a state model admits a state it should forbid. Listing three options in words leaves the user unable to tell them apart.
+
+Climb only as far as the decision needs, and stop at the first rung that settles it.
+
+| Rung | Form | Reach for it when |
+|---|---|---|
+| 1 | One line describing the layout or shape | Default |
+| 2 | An ASCII sketch carried inside the round's question, through the host's structured-question tool (Claude Code: `AskUserQuestion`, with the sketch in an option's `preview`; Codex: `request_user_input`) | Two or more arrangements are defensible and they differ structurally |
+| 3 | Build one version, then show the rendered result | Only one arrangement is defensible and what is left is finish |
+| 4 | A throwaway prototype | Rung 2 failed to settle it **and** the user authorised the cost in this turn |
+
+Rung 2 carries exactly what drives rework: which region is primary, what sits where, how many zones, the information hierarchy. What it cannot carry — type, colour, motion feel — is the part that is cheap to change once it exists. So a sketch plus one build pass beats three built variants nearly every time.
+
+Never climb to rung 4 on your own initiative. Name the decision rung 2 failed to settle, state what the prototype costs, and ask.
+
+### Rung 4, once authorised
+
+Two shapes, not equally worth their cost.
+
+A **logic prototype** answers "can this state exist when it must not" for a state machine, reducer, or data model. One self-contained HTML file: the logic as a pure module touching no DOM, a panel showing full state after every action, one button per action for free play, plus a few ordered scenarios covering the awkward cases. Label everything in the project's domain language so a non-developer can drive it. Cheap, and it pays twice — the validated module lifts into real code, and a model that admits an illegal state costs far more to correct after implementation.
+
+A **UI variant prototype** answers "what should this look like" with several structurally different versions behind one URL parameter, switchable in place. Mount them on the real page with its real data and density; variants judged in an empty route all look fine. They must disagree about layout and hierarchy, not colour. Expensive, and since it needs the host page to already exist, rung 3 usually beats it.
+
+Either way record the question, the options, and the resolution in `research/prototype-<topic>.md`. Fold the winning decision into real code and keep the prototype itself out of the main branch, pointed at from the task artifact.
+
 ## Thinking Framework: First Principles Analysis
 
 When requirements are vague, solutions feel over-engineered, or you're about to add complexity "because everyone does" — decompose to fundamental truths before reasoning upward.
@@ -157,8 +184,11 @@ The final planning summary must show Goal, In Scope, Out of Scope, Acceptance Cr
 - confirmed facts
 - requirements
 - acceptance criteria
+- not yet specified
 - out of scope
 - open questions that still block planning
+
+**Not yet specified** and **out of scope** are different rejections and must not be merged. Not-yet-specified is inside this task's boundary but not sharp enough to state as a question yet; it graduates into a real question once an earlier decision clears the way. Out-of-scope is ruled outside the boundary and never graduates. The test is sharpness, not answerability: if you can phrase the question precisely right now, it belongs on the frontier or in a later round even when nothing can answer it yet. Collapsing the two loses work in both directions — a vague item gets treated as decided against, or a decided-against item gets treated as pending.
 
 `design.md` records technical design:
 

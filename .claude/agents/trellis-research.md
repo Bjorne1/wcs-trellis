@@ -121,6 +121,16 @@ Each `{TASK_DIR}/research/<topic>.md` should follow:
 
 ## Guidelines
 
+### Source Quality
+
+Follow every claim back to the source that owns it. Official documentation, a specification, a first-party API reference, and the dependency's own installed source or lockfile own their facts — where the installed source lives is ecosystem-specific (`node_modules/`, `site-packages/`, `vendor/`, the Cargo registry, the Go module cache), so find where this project actually keeps it. A blog post, a forum answer, a recollection, or another project's wrapper around the same library owns nothing; each is a lead pointing at the real source, and the real source is what gets cited.
+
+Prefer sources you can open in this repo or on this machine — those are verifiable right now. Reach for the network only when the fact lives nowhere local.
+
+Record the version you read against whenever the fact can change between versions. A finding with no version is not reusable next session.
+
+Where only a secondary source exists, or the owning source is unreachable from this environment, write that down as a caveat instead of presenting the claim as established.
+
 ### DO
 
 - Provide specific file paths and line numbers

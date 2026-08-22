@@ -8,6 +8,8 @@
 
 This directory contains guidelines for frontend development. Fill in each file with your project's specific conventions.
 
+One file is the exception: `visual-design.md` ships filled in, because visual craft rules are general knowledge no codebase can state. Read it as-is; override a rule where your project has decided against it.
+
 ---
 
 ## Guidelines Index
@@ -20,6 +22,42 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [State Management](./state-management.md) | Local state, global state, server state | To fill |
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
 | [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
+| [Visual Design](./visual-design.md) | Typography, color, motion, surfaces, banned patterns, render verification | Ready to use |
+
+---
+
+## Pre-Development Checklist
+
+Read before writing frontend code. `trellis-before-dev` follows this section.
+
+1. **Read the conventions that apply.** The files above covering the layers you are about to touch — component patterns, state, types — plus `visual-design.md` whenever the change is visible on screen.
+2. **Lock the visual direction before the first component.** Infer each of these from the existing product, its tokens, and its sibling components first; ask only where a missing answer would change what you build, and state your inferred answer for the rest so it can be corrected.
+   - Who uses this surface, and in what context? A dense analyst view is not a landing page.
+   - What is the aesthetic direction, named precisely? "Clean and modern" is not a direction. If the user names a reference product, do not accept the name — extract three concrete properties from it (radius philosophy, how depth is expressed, accent family) and name those.
+   - What are the hard constraints? Framework, bundle size, contrast minimums, keyboard access.
+   - Which single CSS strategy applies? Name it once, then do not drift. See the stack-conflict table in `visual-design.md`.
+   - Does anything move, and if so what? `none` with a reason is a valid answer for a quiet utility surface.
+3. **Adding to a mature product skips the direction question — the direction is the product.** Grep for the nearest existing sibling component and reuse its container, motion, and type tokens. Inventing a new style needs a stated reason why no existing component fits.
+4. **State the change boundary.** The smallest behavior gap, where that behavior actually lives, which files you expect to touch, and what you are explicitly not doing.
+
+---
+
+## Quality Check
+
+Run before reporting a frontend change complete. `trellis-check` follows this section.
+
+- [ ] Project lint, type-check, and tests pass, with the output shown in this session.
+- [ ] **The rendered surface was opened**, not just the code read. Editing a string is not seeing the screen; a passing build says nothing about layout.
+- [ ] Screenshotted at 375px and 1280px, in every shipped locale.
+- [ ] No banned pattern from `visual-design.md` slipped in unintentionally. Where the direction genuinely required breaking one, the tradeoff is named.
+- [ ] Text blocks swept for near-wrap, orphan last lines, and localized overflow inside buttons, tabs, nav, and compact cards.
+- [ ] Adjacent nested surfaces are actually distinguishable at the required threshold, checked on screen rather than in the stylesheet.
+- [ ] Accessibility baseline holds: `aria-label` on icon-only buttons, real `<button>`/`<a>` elements, `alt` text, visible focus states.
+- [ ] AI Slop Test: would a stranger glancing at the first viewport say an AI made this? If yes, fix typography, color, or layout before shipping.
+
+**When this environment cannot render.** Several items above need a real browser or device. Where that is unavailable — headless agent, CI, no display, no credentials for the running app — do not tick the box and do not stall. Write the gap down instead: which items could not run, why this environment cannot run them, and what specifically remains unverified. Then hand off the exact URL or screen plus the pass/fail check a human should apply.
+
+A stated gap is a complete result. A ticked box for a screen nobody opened is the exact failure `trellis-check` calls a hollow green, and it is worse than an honest gap because it cannot be distinguished from real verification later.
 
 ---
 

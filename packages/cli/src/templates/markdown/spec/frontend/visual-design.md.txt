@@ -1,0 +1,153 @@
+# Visual Design Rules
+
+> **This file ships filled in.** Unlike its siblings in this directory, it is not a "document your project's conventions" stub. These rules are general craft knowledge that a codebase cannot tell you — no config file states which typefaces read as unconsidered, and no linter catches a purple-to-blue gradient. Delete or override any rule your project has deliberately decided against, and record the reason where you override it.
+>
+> Project-specific token values (your palette, your type scale, your radius scale) belong in a `DESIGN.md`-style section you add at the bottom, or in `component-guidelines.md`. This file holds the rules that hold regardless of project.
+
+---
+
+## Absolute Bans
+
+Each of these appears in the majority of AI-generated interfaces. Each has a specific rewrite. Any of them may appear when the committed direction genuinely calls for it — never by default, and the tradeoff gets named.
+
+| Pattern | Why | Rewrite |
+|---|---|---|
+| `border-left` / `border-right` wider than 1px as a section accent | The most overused "design touch" in dashboard UIs; beyond a hairline it reads as a mistake | Change the structure: a colored dot, a short horizontal rule, a background swatch, or a weight shift |
+| `background-clip: text` gradient text | Decorative, not meaningful; illegible in print and high-contrast mode | Solid brand color, tinted neutral, or typographic weight |
+| `backdrop-filter: blur` glass as the default card surface | Expensive on low-power devices, and the layered-depth illusion breaks against a solid border | Background-color steps plus `box-shadow` |
+| Purple-to-blue gradients, cyan-on-dark accents | The canonical "AI palette"; communicates nothing about the product | Derive the palette from the brand words via the color rules below |
+| Rounded-rect card with `box-shadow` as the default container | Applies one container to every content type regardless of hierarchy | Default to cardless sections; add card treatment only when the content type needs it |
+| Modal as the escape hatch for overflow | Interrupts flow, breaks back navigation | Inline expansion, detail panel, or a route; modal only when the action truly needs focus-lock |
+| `transition: all` | Transitions every animatable property, including ones you never meant to touch, and re-runs on unrelated changes | Name exact properties: `transition-property: transform, opacity` |
+| Animating `width` / `height` / `padding` / `margin` | Forces layout recalculation every frame | Animate `transform` instead. Height reveal is the one case with no transform equivalent — see the exception under Motion |
+
+**Template test**: swap in completely different content. If the layout still works with no changes, that is a template, not a design.
+
+## Typography
+
+Reject as a *display* face: Inter, DM Sans, DM Serif, Outfit, Plus Jakarta Sans, Instrument Sans/Serif, Space Grotesk, Space Mono, IBM Plex, Syne, Fraunces, Newsreader, Lora, Crimson, Playfair Display, Cormorant. These dominate training data, so reaching for one signals that no decision was made. Informed product-UI use is fine when justified — Inter in a dense data table is a decision; Inter as a landing-page display face is a reflex. The list is not exhaustive: any face chosen without a stated reason belongs on it.
+
+Selection: write three words for the brand, name the three faces you would reach for reflexively, reject all three, then pick one you can justify in a sentence.
+
+Details that separate typeset from typed:
+
+- Letter-spacing scales with size. Display type needs negative tracking: about `-0.022em` at 32px and above, `-0.012em` at 20–28px, normal at 16px and below. Positive tracking on a large headline is always wrong.
+- `text-wrap: balance` on headings and short blocks; `text-wrap: pretty` on body copy; leave code blocks alone.
+- `font-variant-numeric: tabular-nums` for counters, timers, prices, and any number that updates in place.
+- Constrain body paragraphs to roughly 65 characters.
+
+### CJK and mixed script
+
+Latin-only rules silently break CJK text.
+
+- Latin face first, CJK face after, so each script gets correct glyphs: `-apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif`.
+- CJK body copy needs more line-height than Latin: roughly 1.7–1.8 against Latin's 1.4–1.5.
+- Tag runs with `lang="zh"` / `lang="ja"` / `lang="en"` so the browser picks the right face and line-breaking.
+- A serif reading mode needs an explicit CJK serif fallback, or the toggle silently drops Chinese back to sans: `"Newsreader", "Songti SC", "Noto Serif SC", serif`.
+- Never apply negative letter-spacing to CJK runs. Scope the tracking rule above to `lang="en"`.
+
+## Color
+
+- Use OKLCH over HSL: it is perceptually uniform, so equal numeric steps read as equal perceived steps.
+- Reduce chroma toward the lightness extremes. At 85% lightness, chroma around 0.08 is plenty; 0.15 looks garish.
+- Tint neutrals toward the brand hue at chroma 0.005–0.01. Even that faint amount reads as cohesion.
+- 60-30-10 is about visual weight, not pixel count: 60% surface, 30% secondary text and borders, 10% accent.
+- Never gray text on a colored background. Use the background hue at reduced lightness.
+- Light and dark are both deliberate choices, neither is the default. Dark suits data density and long low-light sessions; light suits trust, legibility, and ambient daytime use. If the context does not decide it, ship light first.
+
+## Surface Hierarchy
+
+Adjacent nested surfaces must be visually distinguishable, and the mechanism differs by mode.
+
+- **Light**: at least a 4% lightness step between sidebar and main, and between main and cards; or a shadow of at least `0 1px 3px rgba(0,0,0,0.10)` on elevated cards. A white card on near-white with `0 1px 2px rgba(0,0,0,0.05)` is not depth, it is noise.
+- **Dark**: the canvas is near-black solid; elevation comes from semi-transparent white on top of it — cards `rgba(255,255,255,0.02)`, elevated `0.04`, prominent `0.05`. Dark-on-dark drop shadows are nearly invisible, so luminance stepping is the depth cue.
+- Prefer layered `box-shadow` over borders for elevation; reserve `border` for dividers and table cells.
+- Concentric radius: `outerRadius = innerRadius + padding`. Past 24px padding, treat the layers as separate surfaces and choose independently.
+- Commit to a named radius scale before the first component. Three or four tiers is enough.
+
+## Motion
+
+**Frequency decides whether a thing animates at all** — settle that before duration or curve. Nothing keyboard-initiated animates. Something triggered hundreds of times a day reads motion as lag, so it gets none. Occasional surfaces (modal, drawer, toast) get the standard treatment. Rare or once-only moments can carry delight. If the only answer to "why does this move" is that it looks nice, and the user sees it daily, delete it.
+
+Once motion is earned:
+
+- Duration follows the element: press feedback 100–160ms, tooltip 125–200ms, dropdown 150–250ms, modal or drawer 200–500ms. An interactive element over 300ms needs a stated reason.
+- Perceived speed comes from the first frame, not the total. When something feels slow, fix the curve before the number.
+- Default to exponential ease-out (`cubic-bezier(0.16,1,0.3,1)`), not bounce or elastic — real objects decelerate smoothly. A small bounce is right only where a finger is still driving the motion (drag-to-dismiss, press-and-hold).
+- `ease-in` belongs on one thing only: a short exit. On an enter, hover, or press it delays the first frame and reads as lag.
+- Never enter from `scale(0)`. Nothing physical appears out of nothing — enter from `scale(0.95)` with `opacity: 0`.
+- Anchor the origin to the trigger: popovers, dropdowns, and tooltips scale from the control that opened them. Modals are the exception and stay centered.
+- Animate `transform` and `opacity` only. These two composite without touching layout, so they are the only properties that stay cheap at 60fps.
+- **The one exception: revealing height.** No transform expresses "grow to fit content", so a disclosure animation has to animate a layout property. Prefer `grid-template-rows: 0fr → 1fr` on a single-row grid — it is still layout work each frame, so it is not free, but it is confined to one subtree and needs no measured pixel height. Baseline: animatable `fr` interpolation needs Chrome/Edge 107+, Safari 16+, Firefox 127+. Below that it snaps instead of animating, which is an acceptable degradation. Where the baseline is too new, animate `max-height` to a measured value, or cross-fade a pre-sized container. Do not extend this exception to width, padding, or margin — those all have transform equivalents.
+- Never `transition: all`; name exact properties.
+- Every pressable thing moves on press, not only on hover. Hover is pointer-only and does not exist on touch, so an unmoved control leaves the click unacknowledged. `scale(0.96)` on active, via a transition so the press can be interrupted.
+- Wrap hover states in `@media (hover: hover)`. Without it, a tapped element on a touch screen keeps a stuck hover state until the next tap elsewhere.
+- Honor `prefers-reduced-motion` (also listed under the accessibility baseline — that is where it is binding).
+
+## Content Authenticity
+
+Placeholder content that looks real but is not breaks the illusion the moment someone reads it.
+
+- No filler names (John Doe, Jane Smith). Use culturally varied names with real specificity.
+- No filler companies (Acme, Nexus, TechCorp). Give them a domain: Meridian Logistics, Hokkaido Ceramics.
+- No Lorem Ipsum. Write short real copy at the layout's reading level.
+- No round numbers in sample data. `99.94%` and `47.2%` read as measured; `99.99%` and `50%` read as invented.
+- Repeated avatars must not share one image; repeated cards must not share one date.
+- Sentence case on headings. Title Case On Every Heading is the loudest tell in body copy.
+- Drop exclamation marks from success states ("Saved", not "Saved!"). Never open an error with "Oops!".
+- No passive voice in errors: "We couldn't load your data. Try refreshing." beats "Something went wrong."
+- Banned in hero copy and CTAs: Elevate, Seamless, Unleash, Delve, Tapestry, Game-changer, Next-Gen, "In the world of...". Name the specific value instead.
+- When an asset is unavailable, use a labeled placeholder, not a low-quality imitation. Never draw illustrative imagery in inline SVG — SVG is for icons and geometric shapes.
+
+## Stack Conflicts
+
+These combinations produce silent failures. Name the single CSS strategy before the first component and do not drift from it.
+
+| Never combine | Why |
+|---|---|
+| Tailwind + CSS Modules on one element | Specificity conflicts, unpredictable cascade |
+| Framer Motion + CSS transitions on one property | Double-animating causes jank |
+| styled-components / emotion + Tailwind | Two class systems fighting for the same node |
+| Two or more icon sets | Size mismatches and visual inconsistency |
+| Multiple display font families | Competing personalities cancel out |
+| Glass `backdrop-filter` + solid 1px border | The solid edge shatters the layered illusion |
+| Dark background + `#ffffff` text at full opacity | Too harsh; use `rgba(255,255,255,0.85)` |
+| Tailwind v4 `@theme` + dynamically built class names | `@theme` generates utilities JIT; a name built from a variable is purged and the style silently vanishes. Use static class names, a safelist, or `:root` + `extend.colors` |
+
+## Verification
+
+A visual change is not verified by a type check, a passing build, or reading the CSS back. Editing the string is not seeing the screen.
+
+- Open the rendered surface. Screenshot at 375px and 1280px, in every shipped locale.
+- Several regression classes are invisible in source and only appear in the render: early wraps, orphaned separators, table overflow, localized text overflowing a fixed slot.
+- **Line widows**: flag any text block whose last line is under roughly 13% of its widest line. Fix by trimming the copy so the block rebalances, not by adding a `max-width` cap — a cap narrower than its container wraps early and leaves a gap that reads as a premature break. Eyeballing misses these, and text nested in `<code>` hides them from grep.
+- Never rely on `…` truncation to fit text in a fixed slot. Guarantee the fit: compact the format, cap to whole segments, or hard-trim. Metric and label footers must never tail-truncate.
+- Test long words and localized strings inside buttons, tabs, nav, and compact cards before handoff.
+
+**No renderer available.** Where the environment has no browser, display, device, or credentials for the running app, none of the above can be done — so state that rather than claiming or silently dropping it. Name which checks could not run, why, and what stays unverified, then hand off the exact URL or screen plus the pass/fail delta a human should look for. A recorded gap is a complete result; a claim of "looks right" from an unopened screen is not, and it is indistinguishable from real verification once it is written down.
+
+## Accessibility Baseline
+
+Non-negotiable regardless of direction.
+
+- Icon-only buttons need `aria-label`.
+- Actions are `<button>`, navigation is `<a>`. Never `<div onClick>`.
+- Images need `alt`, or `alt=""` when decorative.
+- Visible focus states. Never `outline: none` without a replacement.
+- Honor `prefers-reduced-motion`.
+- Never suppress pinch-zoom (`user-scalable=no`, `maximum-scale=1`). Low-vision users depend on it.
+
+Two neighbouring rules that are **not** accessibility, listed here because they are often mistaken for it:
+
+- `touch-action: manipulation` removes the ~300ms double-tap delay. It is a latency optimization, and it works by disabling double-tap zoom — a gesture some low-vision users rely on. Apply it to specific controls where the delay hurts, not globally, and never at the cost of pinch-zoom.
+- Dropping white text to `rgba(255,255,255,0.85)` on a dark surface is a comfort choice, not a contrast rule, and it *lowers* the contrast ratio. Check the result against the contrast minimum you committed to in the direction; if the surface is near-black the ratio usually still passes, but verify rather than assume.
+
+**Hit-target size** is a project decision, not one number. The published minimums disagree: WCAG 2.2 (2.5.8) sets 24×24 CSS px, Apple HIG says 44×44 pt, Material says 48×48 dp. Pick one for the project and record it in `component-guidelines.md`. Whatever you pick, extend the target with a centered pseudo-element when the visible control is smaller, and never let two targets overlap.
+
+## AI Slop Test
+
+Would a stranger glancing at the first viewport say "an AI made this"? If yes, the direction was not committed to. The usual causes: reflex font, default purple accent, centered hero with two side-by-side CTAs above three identical cards. Fix typography, color, or layout until the answer flips.
+
+---
+
+*The rules in Absolute Bans, Typography, Color, Motion, and AI Slop Test are adapted from [tw93/Waza](https://github.com/tw93/Waza) (MIT), which in turn adapts material from [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache 2.0), [getdesign.md](https://getdesign.md) (MIT), and [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill).*

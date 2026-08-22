@@ -179,6 +179,8 @@ smoke_test/
 
 tmp/
 tmp1/
+# 本地调研用的第三方仓库克隆等临时物；混入提交会把外部许可的源码 vendor 进本仓库
+temp/
 .playwright-mcp
 .gitnexus
 .codegraph/

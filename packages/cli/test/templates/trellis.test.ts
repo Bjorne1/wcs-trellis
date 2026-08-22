@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-} from "../../src/configurators/index.js";
-import {
   scriptsInit,
   commonInit,
   commonPaths,
@@ -23,6 +21,7 @@ import {
   checkAgentTemplate,
   configYamlTemplate,
 } from "../../src/templates/trellis/index.js";
+import { getSkillTemplates } from "../../src/templates/common/index.js";
 
 // =============================================================================
 // Template Constants — module-level string exports
@@ -202,6 +201,48 @@ describe("trellis template constants", () => {
       expect(block).toContain("Multi-deliverable scope");
       expect(block).toContain("parent task plus independently verifiable child tasks");
       expect(block).toContain("not implied by tree position");
+    }
+  });
+
+  it("workflow.md in_progress breadcrumbs carry the same green-evidence rule, and it stays aligned with check.md", () => {
+    // The rule deliberately lives in two layers: a one-line breadcrumb that is
+    // injected every turn, and the full clauses in the check skill. That is two
+    // copies of one meaning, so it needs a lock — otherwise one side gets
+    // reworded and the layers quietly disagree.
+    const inProgress = workflowStateBreadcrumb("in_progress");
+    const inProgressInline = workflowStateBreadcrumb("in_progress-inline");
+
+    const greenLine = (block: string): string => {
+      const line = block
+        .split("\n")
+        .find((l) => l.startsWith("Green is a claim to prove:"));
+      expect(
+        line,
+        "in_progress breadcrumb lost its `Green is a claim to prove:` line",
+      ).toBeDefined();
+      return line as string;
+    };
+
+    // Both dispatch modes must state it identically — they differ only in who
+    // edits the code, not in what counts as a pass.
+    expect(greenLine(inProgress)).toBe(greenLine(inProgressInline));
+
+    // And the breadcrumb must not drift from the skill that owns the detail.
+    const checkSkill = getSkillTemplates().find(
+      (t: { name: string }) => t.name === "check",
+    );
+    expect(checkSkill, "common/skills/check.md is missing").toBeDefined();
+    const checkBody = (checkSkill as { content: string }).content;
+    for (const phrase of [
+      "No unverified claims",
+      "is not a pass",
+      "setup failure, not a product failure",
+    ]) {
+      expect(
+        checkBody,
+        `check.md no longer states "${phrase}", which the in_progress ` +
+          `breadcrumb summarizes — update both or neither`,
+      ).toContain(phrase);
     }
   });
 

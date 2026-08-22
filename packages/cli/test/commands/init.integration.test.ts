@@ -50,8 +50,7 @@ import { init } from "../../src/commands/init.js";
 import { VERSION } from "../../src/constants/version.js";
 import { DIR_NAMES, FILE_NAMES, PATHS } from "../../src/constants/paths.js";
 import { computeHash } from "../../src/utils/template-hash.js";
-import {
-} from "../../src/templates/copilot/index.js";
+import { frontendVisualDesignContent } from "../../src/templates/markdown/index.js";
 import { execSync } from "node:child_process";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -299,6 +298,68 @@ describe("init() integration", () => {
     );
     expect(fs.existsSync(path.join(specDir, "backend"))).toBe(false);
     expect(fs.existsSync(path.join(specDir, "guides", "index.md"))).toBe(true);
+  });
+
+  it("#12a visual-design.md ships filled in and only for frontend-bearing projects", async () => {
+    // go.mod triggers detectProjectType → "backend"
+    fs.writeFileSync(path.join(tmpDir, "go.mod"), "module example.com/app\n");
+
+    await init({ yes: true });
+
+    const specDir = path.join(tmpDir, PATHS.SPEC);
+    // A backend-only project must not pay for visual design rules at all.
+    expect(
+      fs.existsSync(path.join(specDir, "frontend", "visual-design.md")),
+    ).toBe(false);
+
+    // Paired positives, so the assertion above cannot pass for the wrong
+    // reason. On its own it also holds when init silently wrote nothing, or
+    // when the template was deleted outright — neither of which is gating.
+    expect(frontendVisualDesignContent).toContain("Absolute Bans");
+    expect(fs.existsSync(path.join(specDir, "backend", "index.md"))).toBe(true);
+  });
+
+  it("#12b visual-design.md arrives with real rules, not a to-fill stub", async () => {
+    // vite.config.ts triggers detectProjectType → "frontend"
+    fs.writeFileSync(
+      path.join(tmpDir, "vite.config.ts"),
+      "export default {}\n",
+    );
+
+    await init({ yes: true });
+
+    const visualDesign = path.join(
+      tmpDir,
+      PATHS.SPEC,
+      "frontend",
+      "visual-design.md",
+    );
+    expect(fs.existsSync(visualDesign)).toBe(true);
+
+    // Unlike its siblings, this file is useless as a stub: the whole point is
+    // that it carries craft rules a codebase cannot state. Assert on the
+    // load-bearing rules so gutting the file fails the build.
+    const content = fs.readFileSync(visualDesign, "utf-8");
+    expect(content).not.toContain("To fill");
+    expect(content).toContain("Absolute Bans");
+    expect(content).toContain("transition: all");
+    expect(content).toContain("prefers-reduced-motion");
+    expect(content).toContain("AI Slop Test");
+    // The render-verification rule is the UI answer to red evidence.
+    expect(content).toContain("375px");
+
+    // The index must point at it, or nothing reaches it.
+    const frontendIndex = fs.readFileSync(
+      path.join(tmpDir, PATHS.SPEC, "frontend", "index.md"),
+      "utf-8",
+    );
+    expect(frontendIndex).toContain("visual-design.md");
+
+    // trellis-before-dev and trellis-check each instruct the agent to follow a
+    // named section of the spec index. Without these headings those
+    // instructions dead-end, and the rules above are never loaded.
+    expect(frontendIndex).toContain("## Pre-Development Checklist");
+    expect(frontendIndex).toContain("## Quality Check");
   });
 
   // ===========================================================================

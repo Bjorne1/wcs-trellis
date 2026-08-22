@@ -62,6 +62,24 @@ The same directory shape is used by two very different ownership models:
 
 If the goal is "make my project's AI behave differently when discussing release notes," the answer is almost always a project-local skill, not surgery on `trellis-meta/`.
 
+## How To Write It
+
+The rules below apply to any document an agent consumes — a skill, a command, a workflow, an `AGENTS.md` line, a `.trellis/spec/` file. The packaging differs; the writing does not.
+
+**Two budgets, and every addition spends one.** *Context load* is what always-loaded material costs on every turn: a skill description, an `AGENTS.md` line. *Cognitive load* is what it costs the human, who has to remember the thing exists and when to reach for it. Material behind a pointer escapes context load at the price of the pointer's own line. A description is permanent context load in exchange for the agent being able to fire the skill itself — worth paying only when the agent, or another skill, must reach it unprompted.
+
+**Disclose by branch.** Rank each piece by how immediately the agent needs it: in-file step (what it does, in order), in-file reference (consulted on demand), then disclosed reference in `references/` behind a pointer. The test is branching: inline what every path needs, push behind a pointer what only some paths reach. A flat set of peer rules all on one rung is a fine arrangement, not a smell. Sprawl is the failure mode — a document too long even when every line is live, because attention thins across the excess.
+
+**End every step on a checkable completion criterion.** "Understanding reached" invites stopping early; "every changed file accounted for" does not. How much the criterion demands is what drives the digging the agent does inside the step, so wording it weakly quietly reduces the work performed.
+
+**Prefer a word the model already holds.** A compact pretrained concept — *tight* loop, the loop goes *red*, the question *frontier*, a test *seam* — anchors a whole region of behavior in one token, and repeating that token builds a distributed definition. Repeat the word, never the sentence. Coining your own works only if you define it, and you pay in definition tokens what an existing word gives free.
+
+**State the target, not the ban.** A prohibition drags the forbidden behavior into context and makes it more available, not less; the negation is a weak modifier over a strongly activated concept. Prefer "keep comments to one line" over "do not write long comments". Reserve a bare prohibition for a hard guardrail that has no positive phrasing, and even then pair it with the positive target.
+
+**Delete no-ops.** An instruction the model already follows by default pays load and buys nothing. The test is against the *model's* default, not a reader's expectation — settle a disagreement by running the document, not by arguing. A leading word too weak to beat the default is a no-op too, and the fix is a stronger word rather than a different technique.
+
+**Keep one source of truth.** Duplicated meaning costs maintenance and inflates that meaning's apparent rank. The environment is a source of truth as well — `package.json` scripts, config files, `--help` output — so a document restating it is a cache that earns its load only when the lookup is expensive. Cache the unwritten convention and the reason behind a choice; leave one-command lookups to the environment where they cannot go stale.
+
 ## Modify A Command/Prompt/Workflow
 
 Explicit entry points should state:

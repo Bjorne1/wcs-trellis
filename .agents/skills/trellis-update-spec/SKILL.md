@@ -280,6 +280,30 @@ good code example
 > Details about when this happens and how to handle it.
 ```
 
+### Adding a Failure-Derived Rule
+
+For something that went wrong once and must not again, where one line states the rule. Append a row to the owning document's rule table, creating the table on first use:
+
+```markdown
+## Rules learned the hard way
+
+| What happened | Rule |
+|---|---|
+| Changed a signature, missed three call sites the type checker could not see through dynamic dispatch | Grep the symbol name; a green type check does not prove the call sites were found |
+```
+
+`What happened` is the specific failure as it actually occurred, not an abstract symptom — the concrete case is what makes the rule stick, and an abstract one reads as generic advice. `Rule` is one imperative sentence.
+
+Pick the coarsest form that still carries the lesson:
+
+| Form | Use when |
+|---|---|
+| A row in the table above | One line states the rule. The default. |
+| `Common Mistake` block | The causal chain needs Symptom / Cause / Fix / Prevention spelled out separately |
+| Inline `> **Gotcha**` | The warning only makes sense beside one specific passage |
+
+A `trellis-break-loop` retrospective lands here: every prevention mechanism it named becomes a row in the spec document that owns that area. An analysis left in the chat prevents nothing.
+
 ---
 
 ## Interactive Mode

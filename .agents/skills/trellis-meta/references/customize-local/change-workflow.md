@@ -7,6 +7,7 @@ When the user wants to change Trellis phases, next-action hints, whether to crea
 1. `.trellis/workflow.md`
 2. Entry files for the current platform, such as skills/commands/prompts/workflows
 3. The current task's `task.json` and `prd.md`
+4. [`change-skills-or-commands.md`](./change-skills-or-commands.md) → "How To Write It" — the writing rules apply to every document an agent reads, and `workflow.md` is the one loaded most often. Per-turn breadcrumbs are always-loaded context, so the pruning and no-op rules bite hardest here.
 
 ## Common Needs And Edit Points
 

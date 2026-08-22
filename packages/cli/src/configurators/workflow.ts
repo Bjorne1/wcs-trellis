@@ -29,6 +29,7 @@ import {
   frontendComponentGuidelinesContent,
   frontendQualityGuidelinesContent,
   frontendStateManagementContent,
+  frontendVisualDesignContent,
   // Guides structure
   guidesIndexContent,
   guidesCrossLayerThinkingGuideContent,
@@ -199,6 +200,7 @@ async function writeFrontendDocs(specBase: string): Promise<void> {
       content: frontendQualityGuidelinesContent,
     },
     { name: "state-management.md", content: frontendStateManagementContent },
+    { name: "visual-design.md", content: frontendVisualDesignContent },
   ];
   for (const doc of docs) {
     await writeFile(path.join(frontendDir, doc.name), doc.content);

@@ -84,6 +84,10 @@ export const frontendQualityGuidelinesContent: string = readLocalTemplate(
 export const frontendStateManagementContent: string = readLocalTemplate(
   "spec/frontend/state-management.md.txt",
 );
+// Ships filled in, unlike its siblings: visual craft rules a codebase cannot state.
+export const frontendVisualDesignContent: string = readLocalTemplate(
+  "spec/frontend/visual-design.md.txt",
+);
 
 // Guides structure
 export const guidesIndexContent: string = readLocalTemplate(

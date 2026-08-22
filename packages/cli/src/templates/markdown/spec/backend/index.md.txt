@@ -22,6 +22,34 @@ This directory contains guidelines for backend development. Fill in each file wi
 
 ---
 
+## Pre-Development Checklist
+
+Read before writing backend code. `trellis-before-dev` follows this section.
+
+1. **Read the conventions that apply** — the files above covering the layers this change touches, plus `.trellis/spec/guides/` for the cross-cutting thinking guides.
+2. **State the change boundary.** The smallest behavior gap between what happens now and what should happen; where that behavior actually lives (not where it is easiest to intercept); which files you expect to change and why each is necessary; what you are explicitly not doing.
+3. **Name the contract you are about to touch.** Any change to a public function signature, HTTP route, event payload, database schema, or config key has callers. Find them before editing, not after.
+4. **Decide where the test will sit** before writing code, on a boundary that survives a refactor of the implementation behind it.
+
+Fill this section in with your project's own specifics — the commands to run, the layers that need extra care, the areas where mistakes have been costly. The four items above are the platform-neutral floor.
+
+---
+
+## Quality Check
+
+Run before reporting a backend change complete. `trellis-check` follows this section.
+
+- [ ] Project lint, type-check, and tests pass, with the output shown in this session.
+- [ ] New behavior has a test on the boundary chosen above; a bug fix has a regression test that was observed failing before the fix.
+- [ ] Every caller of a changed contract was found and updated. A green type check does not prove this where dispatch is dynamic — search for the symbol.
+- [ ] Errors are propagated or handled deliberately, never swallowed. No debug logging left behind.
+- [ ] No credential, token, or personal data in logs, error messages, or committed fixtures.
+- [ ] Migrations run forward on a copy of real-shaped data, and the rollback path is known.
+
+Replace and extend these with your project's actual gates — the real verification commands, the real risky areas.
+
+---
+
 ## How to Fill These Guidelines
 
 For each guideline file:

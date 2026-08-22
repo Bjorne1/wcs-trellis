@@ -26,6 +26,7 @@ import {
   hasPendingMigrations,
 } from "../src/migrations/index.js";
 import { isManagedPath } from "../src/configurators/index.js";
+import { replacePythonCommandLiterals } from "../src/configurators/shared.js";
 import { AI_TOOLS } from "../src/types/ai-tools.js";
 import { PATHS } from "../src/constants/paths.js";
 import {
@@ -6829,21 +6830,45 @@ describe("regression: .trellis/scripts stays byte-identical to templates/trellis
   });
 
   for (const relativePath of templateFiles) {
-    it(`${relativePath} is byte-identical in both trees`, () => {
+    it(`${relativePath} matches the template after platform rendering`, () => {
       const dogfoodPath = path.join(dogfoodScriptsRoot, relativePath);
       expect(
         fs.existsSync(dogfoodPath),
         `.trellis/scripts/${relativePath} is missing (template has it)`,
       ).toBe(true);
-      const dogfoodBytes = fs.readFileSync(dogfoodPath);
-      const templateBytes = fs.readFileSync(
+      const dogfoodText = fs.readFileSync(dogfoodPath, "utf-8");
+      const templateText = fs.readFileSync(
         path.join(templateScriptsRoot, relativePath),
+        "utf-8",
       );
+      // The dogfood tree is not a byte copy of the template: `copyTrellisDir`
+      // writes it through `replacePythonCommandLiterals`, so on Windows every
+      // `python3` literal lands as `python`. Comparing raw bytes made this test
+      // permanently red for any Windows contributor who ran `trellis update`,
+      // which is how a rendered `developer.py` got committed.
+      //
+      // Run BOTH sides through that same renderer, which is idempotent:
+      //   - Windows, tree freshly checked out: both render to `python`  -> pass
+      //   - Windows, tree rewritten by update: both render to `python`  -> pass
+      //   - Linux/macOS: the renderer is a no-op, both stay `python3`   -> pass
+      //   - a rendered copy committed to git: on Linux the dogfood side
+      //     stays `python` while the template stays `python3`           -> FAIL
+      // That last case is deliberate. Only `python3` may be committed, because
+      // whoever commits a rendered tree otherwise makes their own OS the one
+      // the repository is correct on.
+      //
+      // Everything else still compares exactly: line endings, trailing
+      // whitespace, and BOM all survive this normalization.
+      const normalize = (text: string): string =>
+        replacePythonCommandLiterals(text);
       expect(
-        dogfoodBytes.equals(templateBytes),
+        normalize(dogfoodText) === normalize(templateText),
         `.trellis/scripts/${relativePath} has drifted from ` +
           `packages/cli/src/templates/trellis/scripts/${relativePath}. ` +
-          `Edit both copies, never one.`,
+          `Edit both copies, never one. (Both sides are compared after ` +
+          `replacePythonCommandLiterals, so a python3-vs-python difference ` +
+          `is only the cause if a rendered copy was committed — the ` +
+          `template's \`python3\` form is the one that belongs in git.)`,
       ).toBe(true);
     });
   }

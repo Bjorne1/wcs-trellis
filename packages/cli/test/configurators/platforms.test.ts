@@ -21,10 +21,6 @@ import {
   getHooksConfig as getCodexHooksConfig,
 } from "../../src/templates/codex/index.js";
 import {
-} from "../../src/templates/copilot/index.js";
-import {
-} from "../../src/templates/pi/index.js";
-import {
   settingsTemplate as claudeSettingsTemplate,
   getStatuslineHook,
 } from "../../src/templates/claude/index.js";

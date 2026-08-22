@@ -8,6 +8,7 @@ When the user wants to change the engineering conventions AI follows, add new sp
 2. `.trellis/spec/`
 3. `.trellis/workflow.md` planning artifact guidance and Phase 3.3
 4. Current task `implement.jsonl` / `check.jsonl`
+5. [`change-skills-or-commands.md`](./change-skills-or-commands.md) → "How To Write It" — spec docs are agent-consumed documents too, so the information-hierarchy, single-source-of-truth, and no-op rules apply to them as written.
 
 ## Common Needs
 

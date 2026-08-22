@@ -253,6 +253,7 @@ Tools: `trellis-implement` / `trellis-research` name sub-agent roles dispatched 
 Flow: `trellis-implement` -> `trellis-check` -> commit (Phase 3.4) -> `/trellis:finish-work`. Spec update (3.3) is on demand — run it when the user asks, not as part of the default flow.
 Red before green: work the `implement.md` slice checklist one slice at a time — test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice entry, then write the minimum code to pass. No horizontal slicing, no tautological assertions, no refactoring inside a red-green cycle. `kind=chore` and repos with no runnable harness must state that in the slice entry instead of skipping silently. Load the `trellis-tdd` skill for the full contract.
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
+Green is a claim to prove: never report "tests pass" without this session's command output; a run that skipped or never entered the path is not a pass even when it prints OK; a verifier dying before its assertions is a setup failure, not a product one.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md` -> `implement.md`.
 [/workflow-state:in_progress]
 
@@ -265,6 +266,7 @@ Dispatch prompt starts with `Active task: <task path from task.py current>`. Rea
 Flow: `trellis-before-dev` -> edit -> `trellis-check` -> validation -> commit (Phase 3.4) -> `/trellis:finish-work`. Spec update (3.3) is on demand — run it when the user asks, not as part of the default flow.
 Red before green: work the `implement.md` slice checklist one slice at a time — test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice entry, then write the minimum code to pass. No horizontal slicing, no tautological assertions, no refactoring inside a red-green cycle. `kind=chore` and repos with no runnable harness must state that in the slice entry instead of skipping silently. Load the `trellis-tdd` skill for the full contract.
 Do not dispatch implement/check sub-agents in inline mode.
+Green is a claim to prove: never report "tests pass" without this session's command output; a run that skipped or never entered the path is not a pass even when it prints OK; a verifier dying before its assertions is a setup failure, not a product one.
 Read context: `prd.md` -> `design.md` -> `implement.md`, plus relevant spec/research loaded by skills.
 [/workflow-state:in_progress-inline]
 
