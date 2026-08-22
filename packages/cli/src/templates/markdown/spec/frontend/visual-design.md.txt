@@ -3,6 +3,8 @@
 > **This file ships filled in.** Unlike its siblings in this directory, it is not a "document your project's conventions" stub. These rules are general craft knowledge that a codebase cannot tell you — no config file states which typefaces read as unconsidered, and no linter catches a purple-to-blue gradient. Delete or override any rule your project has deliberately decided against, and record the reason where you override it.
 >
 > Project-specific token values (your palette, your type scale, your radius scale) belong in a `DESIGN.md`-style section you add at the bottom, or in `component-guidelines.md`. This file holds the rules that hold regardless of project.
+>
+> **Scope and shelf life.** Written for web UI: the mechanisms named are CSS, and a React Native / Flutter / desktop-toolkit surface should read the intent and ignore the syntax. Two kinds of content here decay — the browser baselines under Motion, and the typeface list under Typography — so treat both as "true when written" and re-check before leaning on them. Rules as of Trellis 0.7.3 (2026-08).
 
 ---
 
@@ -78,7 +80,7 @@ Once motion is earned:
 - Never enter from `scale(0)`. Nothing physical appears out of nothing — enter from `scale(0.95)` with `opacity: 0`.
 - Anchor the origin to the trigger: popovers, dropdowns, and tooltips scale from the control that opened them. Modals are the exception and stay centered.
 - Animate `transform` and `opacity` only. These two composite without touching layout, so they are the only properties that stay cheap at 60fps.
-- **The one exception: revealing height.** No transform expresses "grow to fit content", so a disclosure animation has to animate a layout property. Prefer `grid-template-rows: 0fr → 1fr` on a single-row grid — it is still layout work each frame, so it is not free, but it is confined to one subtree and needs no measured pixel height. Baseline: animatable `fr` interpolation needs Chrome/Edge 107+, Safari 16+, Firefox 127+. Below that it snaps instead of animating, which is an acceptable degradation. Where the baseline is too new, animate `max-height` to a measured value, or cross-fade a pre-sized container. Do not extend this exception to width, padding, or margin — those all have transform equivalents.
+- **The one exception: revealing height.** No transform expresses "grow to fit content", so a disclosure animation has to animate a layout property. Prefer `grid-template-rows: 0fr → 1fr` on a single-row grid — it is still layout work each frame, so it is not free, but it is confined to one subtree and needs no measured pixel height. Baseline: animatable `fr` interpolation needs Chrome/Edge 107+, Safari 16+, Firefox 127+ (checked 2026-08; re-verify before relying on it). Below that it snaps instead of animating, which is an acceptable degradation. Where the baseline is too new, animate `max-height` to a measured value, or cross-fade a pre-sized container. Do not extend this exception to width, padding, or margin — restructure instead so a `transform` on a child does the work.
 - Never `transition: all`; name exact properties.
 - Every pressable thing moves on press, not only on hover. Hover is pointer-only and does not exist on touch, so an unmoved control leaves the click unacknowledged. `scale(0.96)` on active, via a transition so the press can be interrupted.
 - Wrap hover states in `@media (hover: hover)`. Without it, a tapped element on a touch screen keeps a stuck hover state until the next tap elsewhere.

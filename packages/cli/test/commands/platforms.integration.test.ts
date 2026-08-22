@@ -27,10 +27,18 @@ function runCli(cwd: string, args: string[]) {
   });
 }
 
-function writeTrackedPlatforms(
-  cwd: string,
-  relativePaths: string[],
-): void {
+/**
+ * `spawnSync` blocks the vitest worker for a whole cold Node start plus the
+ * CLI's import graph. Measured standalone that is ~0.5s, but the rest of this
+ * suite saturates the machine with Python subprocess integration tests, and
+ * under that contention the global 10s `testTimeout` is reachable — it went red
+ * on two of three full-suite runs while passing in 0.5s on its own. A timeout
+ * here reports as a product failure when it is a harness one, so these two get
+ * headroom. Kept far below anything a real hang would fit inside.
+ */
+const SPAWN_TIMEOUT_MS = 60_000;
+
+function writeTrackedPlatforms(cwd: string, relativePaths: string[]): void {
   const trellisDir = path.join(cwd, ".trellis");
   fs.mkdirSync(trellisDir, { recursive: true });
   fs.writeFileSync(
@@ -53,25 +61,30 @@ describe("trellis platforms (#396)", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it(
+    "--json reports an empty list when no platform is configured",
+    () => {
+      const result = runCli(tmpDir, ["platforms", "--json"]);
 
-  it("--json reports an empty list when no platform is configured", () => {
-    const result = runCli(tmpDir, ["platforms", "--json"]);
+      expect(result.status).toBe(0);
+      const parsed = JSON.parse(result.stdout) as { platforms: unknown[] };
+      expect(parsed.platforms).toEqual([]);
+    },
+    SPAWN_TIMEOUT_MS,
+  );
 
-    expect(result.status).toBe(0);
-    const parsed = JSON.parse(result.stdout) as { platforms: unknown[] };
-    expect(parsed.platforms).toEqual([]);
-  });
+  it(
+    "human output lists configured platforms without --json",
+    () => {
+      fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
+      writeTrackedPlatforms(tmpDir, [".claude/commands/trellis/continue.md"]);
 
-  it("human output lists configured platforms without --json", () => {
-    fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
-    writeTrackedPlatforms(tmpDir, [
-      ".claude/commands/trellis/continue.md",
-    ]);
+      const result = runCli(tmpDir, ["platforms"]);
 
-    const result = runCli(tmpDir, ["platforms"]);
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Claude Code");
-    expect(result.stdout).toContain(".claude");
-  });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Claude Code");
+      expect(result.stdout).toContain(".claude");
+    },
+    SPAWN_TIMEOUT_MS,
+  );
 });

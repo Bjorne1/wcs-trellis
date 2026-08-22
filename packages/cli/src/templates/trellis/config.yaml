@@ -77,6 +77,30 @@ session_auto_commit: false
 # default_package: frontend
 
 #-------------------------------------------------------------------------------
+# Spec scaffolding
+#-------------------------------------------------------------------------------
+# `spec/frontend/visual-design.md` is the one spec file Trellis ships filled in
+# rather than as a "document your conventions" stub, because visual craft rules
+# are general knowledge no codebase can state. By default it lands only where a
+# frontend layer was detected.
+#
+# - auto (default): written for a frontend or fullstack layer, skipped for a
+#   backend-only one.
+# - always: also written into `spec/frontend/` for a backend-only layer, and
+#   nothing else from `spec/frontend/` is created. Choose this when backend work
+#   in this project regularly reaches a rendered surface.
+#
+# To turn it off, delete the file. `.trellis/spec/` is a protected path, so
+# `trellis update` never writes it back.
+#
+# Read at `trellis init` time. A fresh project has no config.yaml yet, so
+# `always` takes effect from the second `trellis init` onward — set it, then
+# re-run `trellis init` to have the file appear.
+#
+# spec:
+#   visual_design: auto
+
+#-------------------------------------------------------------------------------
 # Default workflow
 #-------------------------------------------------------------------------------
 # Team-shared default workflow for tasks that do not pin one. The id names a

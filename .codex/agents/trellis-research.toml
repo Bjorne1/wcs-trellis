@@ -46,6 +46,23 @@ through the chat reply is a failure.
 5. Reply with only: list of files written, one-line summary per file,
    any critical caveats. Do not paste full research into the reply.
 
+## Source quality
+
+Follow every claim back to the source that owns it. Official docs, a spec, a
+first-party API reference, and the dependency's own installed source or
+lockfile own their facts — find where this project keeps that source
+(`node_modules/`, `site-packages/`, `vendor/`, the Cargo registry, the Go
+module cache). A blog post, a forum answer, a recollection, or another
+project's wrapper owns nothing; each is a lead, and the real source is what
+gets cited. Prefer sources you can open in this repo or on this machine;
+reach for the network only when the fact lives nowhere local.
+
+Record the version you read against whenever the fact can change between
+versions — a finding with no version is not reusable next session. Where only
+a secondary source exists, or the owning source is unreachable from this
+environment, write that down under Caveats instead of presenting the claim as
+established.
+
 ## Scope limits
 
 Write allowed ONLY in `{TASK_DIR}/research/`.

@@ -47,17 +47,12 @@ Read before writing frontend code. `trellis-before-dev` follows this section.
 Run before reporting a frontend change complete. `trellis-check` follows this section.
 
 - [ ] Project lint, type-check, and tests pass, with the output shown in this session.
-- [ ] **The rendered surface was opened**, not just the code read. Editing a string is not seeing the screen; a passing build says nothing about layout.
-- [ ] Screenshotted at 375px and 1280px, in every shipped locale.
-- [ ] No banned pattern from `visual-design.md` slipped in unintentionally. Where the direction genuinely required breaking one, the tradeoff is named.
-- [ ] Text blocks swept for near-wrap, orphan last lines, and localized overflow inside buttons, tabs, nav, and compact cards.
-- [ ] Adjacent nested surfaces are actually distinguishable at the required threshold, checked on screen rather than in the stylesheet.
-- [ ] Accessibility baseline holds: `aria-label` on icon-only buttons, real `<button>`/`<a>` elements, `alt` text, visible focus states.
-- [ ] AI Slop Test: would a stranger glancing at the first viewport say an AI made this? If yes, fix typography, color, or layout before shipping.
+- [ ] `visual-design.md` → **Verification** worked through end to end, including its no-renderer clause for an environment that cannot open the screen. That section owns the render rules — restating them here would just leave two copies to drift.
+- [ ] `visual-design.md` → **Absolute Bans**: nothing slipped in unintentionally, and where the committed direction genuinely required breaking one, the tradeoff is named.
+- [ ] `visual-design.md` → **Surface Hierarchy** and **Accessibility Baseline** both hold.
+- [ ] `visual-design.md` → **AI Slop Test** passes.
 
-**When this environment cannot render.** Several items above need a real browser or device. Where that is unavailable — headless agent, CI, no display, no credentials for the running app — do not tick the box and do not stall. Write the gap down instead: which items could not run, why this environment cannot run them, and what specifically remains unverified. Then hand off the exact URL or screen plus the pass/fail check a human should apply.
-
-A stated gap is a complete result. A ticked box for a screen nobody opened is the exact failure `trellis-check` calls a hollow green, and it is worse than an honest gap because it cannot be distinguished from real verification later.
+Replace and extend these with your project's actual gates — the real dev-server command, the real screens to open, the surfaces that have broken before.
 
 ---
 

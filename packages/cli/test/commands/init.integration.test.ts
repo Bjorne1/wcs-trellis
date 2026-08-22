@@ -82,7 +82,6 @@ describe("init() integration", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-
   it("#1a does not create a project-root .gitattributes", async () => {
     await init({ yes: true });
 
@@ -102,25 +101,6 @@ describe("init() integration", () => {
     expect(logOutput).not.toContain("You'll never say these again!!");
     expect(logOutput).not.toContain("Wrote CLAUDE.md, AI ignored it");
   });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   it("#4 force mode overwrites previously modified files", async () => {
     await init({ yes: true, force: true });
@@ -317,6 +297,47 @@ describe("init() integration", () => {
     // when the template was deleted outright — neither of which is gating.
     expect(frontendVisualDesignContent).toContain("Absolute Bans");
     expect(fs.existsSync(path.join(specDir, "backend", "index.md"))).toBe(true);
+
+    // Same dead-end risk as the frontend index: trellis-before-dev and
+    // trellis-check are told to follow these named sections, so losing the
+    // headings silently strips the backend gates.
+    const backendIndex = fs.readFileSync(
+      path.join(specDir, "backend", "index.md"),
+      "utf-8",
+    );
+    expect(backendIndex).toContain("## Pre-Development Checklist");
+    expect(backendIndex).toContain("## Quality Check");
+    // Existence-conditional pointer: the only way a backend-only layer reaches
+    // visual-design.md when `spec.visual_design: always` puts it there.
+    expect(backendIndex).toContain("../frontend/visual-design.md");
+  });
+
+  it("#12c spec.visual_design: always adds visual-design.md to a backend-only project, and nothing else", async () => {
+    fs.writeFileSync(path.join(tmpDir, "go.mod"), "module example.com/app\n");
+
+    // First init creates config.yaml; the knob is only readable from then on.
+    await init({ yes: true });
+    const configPath = path.join(tmpDir, PATHS.WORKFLOW, "config.yaml");
+    fs.appendFileSync(configPath, "\nspec:\n  visual_design: always\n");
+
+    // -y implies skip mode, so the edited config survives the re-init.
+    await init({ yes: true });
+
+    const frontendDir = path.join(tmpDir, PATHS.SPEC, "frontend");
+    const visualDesign = path.join(frontendDir, "visual-design.md");
+    expect(fs.existsSync(visualDesign)).toBe(true);
+    expect(fs.readFileSync(visualDesign, "utf-8")).toContain("Absolute Bans");
+
+    // Only that one file. The rest of frontend/ would be unfilled stubs a
+    // backend layer has no use for, so pulling them in would be the noise this
+    // knob exists to avoid.
+    expect(fs.readdirSync(frontendDir)).toEqual(["visual-design.md"]);
+
+    // Paired negative control: without the knob the same project gets nothing
+    // (that is #12a), so this assertion cannot be passing by default.
+    expect(fs.readFileSync(configPath, "utf-8")).toContain(
+      "visual_design: always",
+    );
   });
 
   it("#12b visual-design.md arrives with real rules, not a to-fill stub", async () => {
@@ -360,6 +381,13 @@ describe("init() integration", () => {
     // instructions dead-end, and the rules above are never loaded.
     expect(frontendIndex).toContain("## Pre-Development Checklist");
     expect(frontendIndex).toContain("## Quality Check");
+
+    // The index points at the render rules; visual-design.md owns them. This
+    // pair is the lock: the checklist grew a near-verbatim second copy once
+    // already, and two copies of one rule drift without anything noticing.
+    expect(frontendIndex).toContain("→ **Verification**");
+    expect(frontendIndex).not.toContain("375px");
+    expect(frontendIndex).not.toContain("cannot render");
   });
 
   // ===========================================================================
@@ -694,7 +722,6 @@ describe("init() integration", () => {
     );
   });
 
-
   it("#18 monorepo: re-init does not duplicate packages in config.yaml", async () => {
     setupPnpmWorkspace(tmpDir, [{ rel: "packages/lib", name: "lib" }]);
 
@@ -822,7 +849,6 @@ describe("init() integration", () => {
       fs.existsSync(path.join(tmpDir, ".claude", "hooks", "statusline.py")),
     ).toBe(true);
   });
-
 
   it("#28a issue #500: reinit configures Claude when native .claude settings already exist", async () => {
     const nativeSettingsPath = path.join(tmpDir, ".claude", "settings.json");

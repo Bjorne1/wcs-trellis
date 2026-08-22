@@ -7,7 +7,7 @@ description: "Comprehensive quality verification: spec compliance, lint, type-ch
 
 Comprehensive quality verification for recently written code. Combines spec compliance, cross-layer safety, and pre-commit checks.
 
-**Authorization**: a request to check or review is report-only beyond the mechanical local fixes Step 6 defines. Applying broader fixes, committing, or pushing needs the current turn to ask for it.
+**Authorization**: Step 6 sets the fix boundary — mechanical and local you fix, judgment calls you record. Committing and pushing sit outside that boundary in both directions: a check request never carries them, so ask for them separately. Running as a dispatched `trellis-check` sub-agent there is no user turn to ask in, so send the recommendation up to the main session instead of stopping and instead of widening the change on your own.
 
 **Done when**: every changed file has been read against the task's acceptance criteria, the project's checks have run in this session with their output shown, and each finding is either fixed or recorded with a recommendation.
 

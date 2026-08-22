@@ -6866,9 +6866,11 @@ describe("regression: .trellis/scripts stays byte-identical to templates/trellis
         `.trellis/scripts/${relativePath} has drifted from ` +
           `packages/cli/src/templates/trellis/scripts/${relativePath}. ` +
           `Edit both copies, never one. (Both sides are compared after ` +
-          `replacePythonCommandLiterals, so a python3-vs-python difference ` +
-          `is only the cause if a rendered copy was committed — the ` +
-          `template's \`python3\` form is the one that belongs in git.)`,
+          `replacePythonCommandLiterals, so a bare python3-vs-python ` +
+          `difference is only the cause if a rendered copy was committed — ` +
+          `the template's \`python3\` form is the one that belongs in git. If ` +
+          `the diff shows some other Python command, the dogfood tree was ` +
+          `rendered by a run whose resolved command differs from this one.)`,
       ).toBe(true);
     });
   }
