@@ -17,6 +17,7 @@ Usage:
     python task.py set-scope <dir> <scope>     # Set scope for PR title
     python task.py set-meta <dir> <key> <value>  # Set a task metadata key
     python task.py archive <task-dir>          # Archive completed task
+    python task.py deprecate <task-dir> [--reason <text>]  # Abandon task, then archive
     python task.py list                        # List active tasks
     python task.py list-archive [month]        # List archived tasks
     python task.py add-subtask <parent-dir> <child-dir>     # Link child to parent
@@ -53,8 +54,10 @@ from common.workflow_selection import WORKFLOW_ID_RE, workflow_md_for_task
 
 # Import command handlers from split modules (also re-exports for plan.py compatibility)
 from common.task_store import (
+    DEFAULT_DEPRECATE_REASON,
     cmd_create,
     cmd_archive,
+    cmd_deprecate,
     cmd_set_branch,
     cmd_set_base_branch,
     cmd_set_scope,
@@ -503,6 +506,7 @@ Usage:
   python task.py set-scope <dir> <scope>            Set scope for PR title
   python task.py set-meta <dir> <key> <value>       Set/overwrite a task metadata key
   python task.py archive <task-dir>                 Archive completed task
+  python task.py deprecate <task-dir> [--reason <text>]  Abandon a task, then archive it
   python task.py add-subtask <parent> <child>       Link child task to parent
   python task.py remove-subtask <parent> <child>    Unlink child from parent
   python task.py list [--mine] [--status <status>] [--json]  List tasks
@@ -669,6 +673,15 @@ def main() -> int:
     p_archive.add_argument("name", help="Task directory or name")
     p_archive.add_argument("--no-commit", action="store_true", help="Skip auto git commit after archive")
 
+    # deprecate
+    p_deprecate = subparsers.add_parser(
+        "deprecate",
+        help="Abandon a task (wrong direction / cancelled), then archive it",
+    )
+    p_deprecate.add_argument("name", help="Task directory or name")
+    p_deprecate.add_argument("--reason", help=f"Why it is abandoned (default: {DEFAULT_DEPRECATE_REASON})")
+    p_deprecate.add_argument("--no-commit", action="store_true", help="Skip auto git commit after archive")
+
     # list
     p_list = subparsers.add_parser("list", help="List tasks")
     p_list.add_argument("--mine", "-m", action="store_true", help="My tasks only")
@@ -710,6 +723,7 @@ def main() -> int:
         "set-scope": cmd_set_scope,
         "set-meta": cmd_set_meta,
         "archive": cmd_archive,
+        "deprecate": cmd_deprecate,
         "add-subtask": cmd_add_subtask,
         "remove-subtask": cmd_remove_subtask,
         "list": cmd_list,

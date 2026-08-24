@@ -6,6 +6,7 @@ Provides:
     ensure_tasks_dir   - Ensure tasks directory exists
     cmd_create         - Create a new task
     cmd_archive        - Archive completed task
+    cmd_deprecate      - Deprecate (abandon) a task, then archive it
     cmd_set_branch     - Set git branch for task
     cmd_set_base_branch - Set PR target branch
     cmd_set_scope      - Set scope for PR title
@@ -721,6 +722,106 @@ def _auto_commit_archive(
     else:
         print(f"[WARN] Auto-commit failed: {err.strip()}", file=sys.stderr)
         return not source_was_tracked
+
+
+# =============================================================================
+# Command: deprecate
+# =============================================================================
+
+DEFAULT_DEPRECATE_REASON = "Deprecated"
+DEPRECATE_DOC_FILES = ("prd.md", "design.md", "implement.md")
+
+
+def _prepend_deprecated_marker(path: Path, today: str, reason: str) -> bool:
+    """Insert a DEPRECATED banner at the top of a task doc.
+
+    Returns True when the file was written. A missing file, or one that
+    already carries the banner, is left alone — so deprecating the same task
+    twice does not stack banners.
+    """
+    if not path.is_file():
+        return False
+
+    content = path.read_text(encoding="utf-8")
+    if content.lstrip().startswith("## DEPRECATED"):
+        return False
+
+    banner = f"## DEPRECATED\n\nDate: {today}\nReason: {reason}\n\n"
+    path.write_text(banner + content, encoding="utf-8")
+    return True
+
+
+def cmd_deprecate(args: argparse.Namespace) -> int:
+    """Deprecate an abandoned task, then archive it via cmd_archive.
+
+    Deprecation is not completion — the task is being dropped (wrong
+    direction, cancelled requirement, gone obsolete) and there is no
+    deliverable. The archived ``task.json`` still ends up with
+    ``status="completed"`` because cmd_archive owns that field; what marks
+    this as abandoned is ``meta.deprecated`` plus the banner prepended to the
+    task docs, which is the first thing a later reader (or agent) sees.
+
+    Code left behind by the abandoned task is deliberately out of scope: this
+    command never inspects the working tree, commits, or branches. Archive's
+    auto-commit stages only the task's own paths, so unrelated dirty files
+    cannot be swept into the archive commit.
+    """
+    repo_root = get_repo_root()
+    task_name = args.name
+
+    if not task_name:
+        print(colored("Error: Task name is required", Colors.RED), file=sys.stderr)
+        return 1
+
+    task_dir = resolve_task_dir(task_name, repo_root)
+
+    if not task_dir or not task_dir.is_dir():
+        print(colored(f"Error: Task not found: {task_name}", Colors.RED), file=sys.stderr)
+        return 1
+
+    # Same guard as cmd_archive, but enforced *before* anything is written: a
+    # mistyped name (e.g. "src") resolves to a real directory, and without
+    # this check the banner would land in an unrelated prd.md.
+    if not is_within_tasks_dir(task_dir, repo_root):
+        print(colored(
+            f"Error: refusing to deprecate '{task_name}': "
+            f"{task_dir} is not a task under {get_tasks_dir(repo_root)}",
+            Colors.RED), file=sys.stderr)
+        return 1
+
+    task_json_path = task_dir / FILE_TASK_JSON
+    if not task_json_path.is_file():
+        print(colored(f"Error: task.json not found at {task_dir}", Colors.RED), file=sys.stderr)
+        return 1
+
+    reason = (getattr(args, "reason", None) or "").strip() or DEFAULT_DEPRECATE_REASON
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    marked = [
+        name for name in DEPRECATE_DOC_FILES
+        if _prepend_deprecated_marker(task_dir / name, today, reason)
+    ]
+
+    # Written before cmd_archive runs: archive rewrites task.json but only
+    # sets status/completedAt, so this meta survives the move to archive/.
+    data = read_json(task_json_path)
+    if not data:
+        return 1
+    meta = data.get("meta")
+    if not isinstance(meta, dict):
+        meta = {}
+    meta["deprecated"] = True
+    meta["deprecatedAt"] = today
+    meta["deprecatedReason"] = reason
+    data["meta"] = meta
+    if not write_json(task_json_path, data):
+        return 1
+
+    print(colored(f"Deprecated: {task_dir.name} — {reason}", Colors.YELLOW), file=sys.stderr)
+    if marked:
+        print(f"  Marked docs: {', '.join(marked)}", file=sys.stderr)
+
+    return cmd_archive(args)
 
 
 # =============================================================================

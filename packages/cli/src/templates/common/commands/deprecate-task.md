@@ -1,0 +1,45 @@
+# Deprecate Task
+
+Abandon a task that should not continue — wrong direction, cancelled requirement, gone obsolete — and archive it. This is **not** completion: there is no deliverable, and no code commit belongs to this flow. For work that actually finished, use {{CMD_REF:finish-work}}.
+
+Run this only on an explicit request to drop a task: `废弃` / `放弃` / `方向错了` / `需求取消` / `不做了` / "deprecate", "abandon", "drop this task". A task that merely looks stale is not a trigger — ask the user first.
+
+## Step 1: Engage this session
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/task.py engage
+```
+
+No-op when the session already ran an entry point; the step that makes Step 2 see the active task when it did not.
+
+## Step 2: Confirm the target
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/task.py current
+{{PYTHON_CMD}} ./.trellis/scripts/task.py list
+```
+
+State the task name and the reason back to the user and get a yes before Step 3 — deprecating moves the task directory into `archive/` and is not a one-keystroke undo.
+
+Parent and child tasks are dropped as a family. If the target has children, deprecate each child as well — one Step 3 call per task.
+
+## Step 3: Deprecate
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/task.py deprecate <task-name> --reason "<why>"
+```
+
+Write the reason in the user's own words. The command prepends a `## DEPRECATED` banner to `prd.md` / `design.md` / `implement.md`, records `meta.deprecated` / `deprecatedAt` / `deprecatedReason` in `task.json`, then archives the task to `archive/{YYYY-MM}/`. Whether that produces a `chore(task): archive ...` commit follows `session_auto_commit` in `.trellis/config.yaml` (off by default) — same as a normal archive.
+
+Code the abandoned task left behind is out of scope — this command never inspects the working tree, commits, or branches. If it left code that should be reverted, say so and let the user decide; do not revert on your own.
+
+## Step 4: Record the session journal
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/add_session.py \
+  --title "Deprecate task: <task-name>" \
+  --commit - \
+  --summary "<why it was dropped>"
+```
+
+`--commit -` records that no work commit belongs to this entry.

@@ -241,6 +241,8 @@ const SKILL_DESCRIPTIONS: Record<string, string> = {
     "Resume work on the current task. Loads the workflow Phase Index, figures out which phase/step to pick up at, then pulls the step-level detail via get_context.py --mode phase. Use when coming back to an in-progress task and you need to know what to do next.",
   "finish-work":
     "Wrap up the current session: verify quality gate passed, remind user to commit, archive completed tasks, and record session progress to the developer journal. Use when done coding and ready to end the session.",
+  "deprecate-task":
+    "Abandon a Trellis task that should not continue — wrong direction, cancelled requirement, or gone obsolete: banner-marks its docs, records meta.deprecated in task.json, and archives it. Use when the user explicitly asks to deprecate, drop, abandon, or cancel a task (废弃 / 放弃 / 方向错了 / 需求取消 / 不做了). Not for work that finished — that is finish-work.",
   "before-dev":
     "Discovers and injects project-specific coding guidelines from .trellis/spec/ before implementation begins. Reads spec indexes, pre-development checklists, and shared thinking guides for the target package. Use when starting a new coding task, before writing any code, switching to a different package, or needing to refresh project conventions and standards.",
   brainstorm:

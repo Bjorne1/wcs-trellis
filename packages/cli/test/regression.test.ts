@@ -5510,6 +5510,68 @@ describe("regression: current-task path normalization", () => {
     );
   });
 
+  it("[deprecate] task.py deprecate banners the docs, records meta.deprecated, and archives", () => {
+    setupTaskRepo();
+    const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
+
+    const result = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "deprecate",
+        ".trellis/tasks/issue-106",
+        "--reason",
+        "wrong direction",
+      ],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    expect(result.status).toBe(0);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".trellis", "tasks", "issue-106")),
+    ).toBe(false);
+
+    const archiveRoot = path.join(tmpDir, ".trellis", "tasks", "archive");
+    const yearMonth = fs.readdirSync(archiveRoot)[0];
+    const archived = path.join(archiveRoot, yearMonth, "issue-106");
+
+    // cmd_archive owns `status`, so a deprecated task still reads as
+    // completed — meta.deprecated is what distinguishes the two exits.
+    const data = JSON.parse(
+      fs.readFileSync(path.join(archived, "task.json"), "utf-8"),
+    );
+    expect(data.status).toBe("completed");
+    expect(data.meta.deprecated).toBe(true);
+    expect(data.meta.deprecatedReason).toBe("wrong direction");
+    expect(data.meta.deprecatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    // The banner is the first thing a later reader (or agent) sees.
+    const prd = fs.readFileSync(path.join(archived, "prd.md"), "utf-8");
+    expect(prd.startsWith("## DEPRECATED")).toBe(true);
+    expect(prd).toContain("Reason: wrong direction");
+    expect(prd).toContain("# PRD");
+  });
+
+  it("[deprecate] task.py deprecate refuses a non-task directory before writing anything", () => {
+    setupTaskRepo();
+    writeProjectFile(path.join("src", "prd.md"), "# PRD\n\nproduction file\n");
+    const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
+
+    const result = spawnSync(
+      pythonCmd,
+      [taskScriptPath, "deprecate", "src", "--reason", "typo"],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("refusing to deprecate 'src'");
+    // The guard runs before any write, so no banner leaked into a real file.
+    expect(fs.readFileSync(path.join(tmpDir, "src", "prd.md"), "utf-8")).toBe(
+      "# PRD\n\nproduction file\n",
+    );
+    expect(fs.existsSync(path.join(tmpDir, "src"))).toBe(true);
+  });
+
 });
 
 describe("regression: backslash in markdown templates (beta.12)", () => {

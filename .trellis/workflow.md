@@ -48,6 +48,7 @@ python ./.trellis/scripts/task.py start <name>          # set active task (sessi
 python ./.trellis/scripts/task.py current --source      # show active task and source
 python ./.trellis/scripts/task.py finish                # clear active task (triggers after_finish hooks)
 python ./.trellis/scripts/task.py archive <name>        # move to archive/{year-month}/
+python ./.trellis/scripts/task.py deprecate <name> [--reason <text>]   # abandon, then archive
 python ./.trellis/scripts/task.py list [--mine] [--status <s>]
 python ./.trellis/scripts/task.py list-archive
 
@@ -74,6 +75,8 @@ python ./.trellis/scripts/task.py create-pr [name] [--dry-run]
 > Run `python ./.trellis/scripts/task.py --help` to see the authoritative, up-to-date list.
 
 **Current-task mechanism**: `task.py create` creates the task directory and (when session identity is available) auto-sets the per-session active-task pointer so the planning breadcrumb fires immediately. `task.py start` writes the same pointer (idempotent if already set) and flips `task.json.status` from `planning` to `in_progress`. State is stored under `.trellis/.runtime/sessions/`. If no context key is available from hook input, `TRELLIS_CONTEXT_ID`, or a platform-native session environment variable, there is no active task and `task.py start` fails with a session identity hint. `task.py finish` deletes the current session file (status unchanged). `task.py archive <task>` writes `status=completed`, moves the directory to `archive/`, and deletes any runtime session files that still point at the archived task.
+
+**Two ways out of the active set**: a task either finishes (`/trellis:finish-work` → `task.py archive`) or is abandoned (`/trellis:deprecate-task` → `task.py deprecate`). Deprecate banners `prd.md` / `design.md` / `implement.md` with `## DEPRECATED`, records `meta.deprecated` / `deprecatedAt` / `deprecatedReason` in `task.json`, then archives through the same path — so `status=completed` alone does **not** distinguish a finished task from an abandoned one; `meta.deprecated` does. Two consequences to know: an abandoned child still counts as done in a parent's `[n/m done]` progress counter (parent and children are expected to be dropped as a family), and `deprecate` never touches the working tree, commits, or branches — code the abandoned task left behind is the user's call.
 
 ### Workspace System
 
