@@ -150,6 +150,70 @@ describe("getConfiguredPlatforms", () => {
     expect([...getConfiguredPlatforms(tmpDir)]).toEqual([]);
   });
 
+  it("does not detect a platform from files whose names are not Trellis-specific", () => {
+    for (const id of PLATFORM_IDS) {
+      const ambiguous = [
+        ...(collectPlatformTemplates(id)?.keys() ?? []),
+      ].filter(
+        (relativePath) =>
+          relativePath.startsWith(`${AI_TOOLS[id].configDir}/`) &&
+          !relativePath
+            .split("/")
+            .some((seg) => seg === "trellis" || seg.startsWith("trellis-")),
+      );
+      // settings.json / config.toml / hooks.json / shared hooks/*.py — files a
+      // project can hold without Trellis. If a platform ever stops shipping
+      // such a path this loop would assert nothing, so require at least one.
+      expect(ambiguous.length).toBeGreaterThan(0);
+      for (const relativePath of ambiguous) {
+        const absPath = path.join(tmpDir, ...relativePath.split("/"));
+        fs.mkdirSync(path.dirname(absPath), { recursive: true });
+        fs.writeFileSync(absPath, "not written by trellis\n");
+      }
+    }
+
+    expect([...getConfiguredPlatforms(tmpDir)]).toEqual([]);
+  });
+
+  // Regression: a re-init over an existing project rewrote the manifest from
+  // only the paths that run wrote. Existing platform files are skipped rather
+  // than rewritten, so every platform path fell out of tracking and the
+  // manifest kept just the recursively-walked `.trellis/` tree. Detection read
+  // the manifest alone, so `collectTemplateFiles` stopped offering the
+  // platform's files and `trellis update` reported "Already up to date" while
+  // never delivering newly added commands or skills.
+  it("detects every platform from on-disk trellis-owned files when the manifest lost its platform section", async () => {
+    for (const id of PLATFORM_IDS) {
+      const platformRoot = path.join(tmpDir, id);
+      fs.mkdirSync(platformRoot, { recursive: true });
+      const written = startRecordingWrites(platformRoot);
+      try {
+        await configurePlatform(id, platformRoot);
+      } finally {
+        stopRecordingWrites();
+      }
+      fs.mkdirSync(path.join(platformRoot, ".trellis"), { recursive: true });
+      initializeHashes(platformRoot, { trackedPaths: written });
+
+      const manifestPath = path.join(
+        platformRoot,
+        ".trellis",
+        ".template-hashes.json",
+      );
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as {
+        hashes: Record<string, string>;
+      };
+      manifest.hashes = Object.fromEntries(
+        Object.entries(manifest.hashes).filter(([key]) =>
+          key.startsWith(".trellis/"),
+        ),
+      );
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+      expect([...getConfiguredPlatforms(platformRoot)]).toEqual([id]);
+    }
+  }, 60_000);
+
 
   // Cost scales with the whole platform × file matrix (21 platforms, each fully
   // configured and hashed), so it sits well above the 10s global timeout on

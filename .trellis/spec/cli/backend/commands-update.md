@@ -76,7 +76,11 @@ Note that `force` / `skipAll` / `createNew` are mutually exclusive in spirit but
 | Per-platform files | `configurators/index.ts:collectPlatformTemplates` for each detected platform via `configurators/index.ts:getConfiguredPlatforms` |
 | `.claude/settings.json` `statusLine` | preserved through `commands/update.ts:preserveExistingClaudeStatusLine` |
 
-Platforms are auto-discovered by directory existence in `cwd`. There is one exception: if `commands/update.ts:needsCodexUpgrade` returns true (legacy Trellis tracked `.agents/skills/` but no `.codex/` exists yet), `commands/update.ts:update` passes `extraPlatforms: new Set(["codex"])` to force Codex template collection so the upgrade can create `.codex/`.
+Platforms are auto-discovered by `getConfiguredPlatforms`, which accepts either of two independent kinds of evidence for each of a platform's `configDir`-scoped template paths: the path is recorded in `.trellis/.template-hashes.json`, or the path is `trellis`-marked (a `trellis` segment or a `trellis-` prefix) and present on disk. Bare directory existence is not evidence — a hand-made `.claude/` detects nothing, and neither do `settings.json` / `config.toml` / `hooks.json` / the shared `hooks/*.py` names, which projects hold without Trellis.
+
+The disk half of that rule is what makes an update recover a project whose manifest lost its platform section. `initializeHashes` only covers platform paths a run actually wrote, so a manifest can end up holding just the recursively-walked `.trellis/` tree. Detecting from the manifest alone then yields an empty platform set, `collectTemplateFiles` stops offering those platforms' files, and `trellis update` prints `✓ Already up to date!` while never delivering a newly added command or skill. Such a project heals on the next update; note that its platform files still carry no recorded hash, so any that differ from the template land in `changedFiles` and prompt rather than auto-update.
+
+There is one further exception: if `commands/update.ts:needsCodexUpgrade` returns true (legacy Trellis tracked `.agents/skills/` but no `.codex/` exists yet), `commands/update.ts:update` passes `extraPlatforms: new Set(["codex"])` to force Codex template collection so the upgrade can create `.codex/`.
 
 After collection, `collectTemplateFiles` runs two final passes:
 

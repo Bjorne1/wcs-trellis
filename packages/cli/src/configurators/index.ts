@@ -10,6 +10,9 @@
  * 4. Creating the template directory
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 import {
   AI_TOOLS,
   getManagedPaths,
@@ -75,11 +78,41 @@ export const PLATFORM_MANAGED_DIRS = PLATFORM_IDS.flatMap((id) =>
 export const ALL_MANAGED_DIRS = [".trellis", ...new Set(PLATFORM_MANAGED_DIRS)];
 
 /**
+ * Whether a template path is unambiguously Trellis-owned judged by its own
+ * name, with no help from the hash manifest.
+ *
+ * Only `trellis`-marked path segments qualify. `.claude/settings.json`,
+ * `.codex/config.toml`, `.codex/hooks.json` and the shared `hooks/*.py` script
+ * names all occur in projects that never installed Trellis, so their presence
+ * proves nothing about whether Trellis configured the platform.
+ */
+function isTrellisOwnedPath(relativePath: string): boolean {
+  return relativePath
+    .split("/")
+    .some((segment) => segment === "trellis" || segment.startsWith("trellis-"));
+}
+
+/**
  * Detect platforms from Trellis-owned templates, not native config directories.
  *
  * A platform directory may predate Trellis. The template hash manifest records
  * only files Trellis actually wrote, while the platform template registry
  * supplies each platform's distinct file layout.
+ *
+ * Evidence is taken from two independent sources, either of which is enough:
+ *
+ * 1. the path is in the hash manifest, and
+ * 2. the path is `trellis`-marked and present on disk.
+ *
+ * The second source exists because the manifest can lose its whole platform
+ * section — `initializeHashes` only covers platform paths the run actually
+ * wrote, so any init that rewrites the manifest while skipping already-present
+ * platform files drops them from tracking. Detecting from the manifest alone
+ * then reports "no platforms configured", and `collectTemplateFiles` silently
+ * stops offering that platform's files, so a release adding a new command or
+ * skill never reaches the project while `trellis update` still prints
+ * "Already up to date". Disk presence recovers those projects on the next
+ * update; a bare `.claude/` created by hand still detects nothing.
  */
 export function getConfiguredPlatforms(cwd: string): Set<AITool> {
   const platforms = new Set<AITool>();
@@ -88,13 +121,15 @@ export function getConfiguredPlatforms(cwd: string): Set<AITool> {
   for (const id of PLATFORM_IDS) {
     const configDir = AI_TOOLS[id].configDir;
     const templates = collectPlatformTemplates(id);
-    const hasTrackedTemplate = [...(templates?.keys() ?? [])].some(
+    const hasTrellisTemplate = [...(templates?.keys() ?? [])].some(
       (relativePath) =>
         (relativePath === configDir ||
           relativePath.startsWith(`${configDir}/`)) &&
-        hashes[relativePath] !== undefined,
+        (hashes[relativePath] !== undefined ||
+          (isTrellisOwnedPath(relativePath) &&
+            fs.existsSync(path.join(cwd, ...relativePath.split("/"))))),
     );
-    if (hasTrackedTemplate) {
+    if (hasTrellisTemplate) {
       platforms.add(id);
     }
   }
