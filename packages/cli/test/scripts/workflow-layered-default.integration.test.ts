@@ -193,6 +193,8 @@ describe.skipIf(!hasPython())("layered workflow default resolution", () => {
         taskScript,
         "create",
         "Workflow command",
+        "--description",
+        "per-task workflow selection fixture",
         "--slug",
         "workflow-command",
         "--workflow",

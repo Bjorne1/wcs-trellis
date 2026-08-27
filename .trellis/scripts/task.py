@@ -4,7 +4,7 @@
 Task Management Script.
 
 Usage:
-    python task.py create "<title>" [--slug <name>] [--assignee <dev>] [--priority P0|P1|P2|P3] [--parent <dir>] [--package <pkg>] [--no-start]
+    python task.py create "<title>" --description "<desc>" [--slug <name>] [--assignee <dev>] [--priority P0|P1|P2|P3] [--parent <dir>] [--package <pkg>] [--no-start] [--force]
     python task.py add-context <dir> <file> <path> [reason] # Add jsonl entry
     python task.py validate <dir>              # Validate jsonl files
     python task.py list-context <dir>          # List jsonl entries
@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from common.log import Colors, colored
 from common.paths import (
@@ -48,7 +49,11 @@ from common.active_task import (
     set_active_task,
     write_pending_claim,
 )
-from common.io import read_json, write_json
+from common.io import (
+    describe_json_read_failure,
+    read_json_checked,
+    write_json,
+)
 from common.task_utils import resolve_task_dir, run_task_hooks
 from common.tasks import iter_active_tasks, children_progress
 from common.workflow_selection import WORKFLOW_ID_RE, workflow_md_for_task
@@ -117,6 +122,40 @@ def cmd_engage(args: argparse.Namespace) -> int:
     return 0
 
 
+def _flip_status_to_in_progress(task_json_path: Path, label: str = "") -> None:
+    """Move a freshly started task from planning to in_progress.
+
+    Tolerant on purpose — a broken task.json does not fail `start`, because the
+    session pointer is the point of the command. But the read overwrites the
+    file it just read, so neither failure may be silent: without a message the
+    absent status line looks like the task simply was not in planning.
+    """
+    data, reason = read_json_checked(task_json_path)
+    if data is None:
+        problem, hint = describe_json_read_failure(task_json_path, reason)
+        print(
+            colored(f"Warning: {problem}; status not updated.", Colors.YELLOW),
+            file=sys.stderr,
+        )
+        print(hint, file=sys.stderr)
+        return
+
+    if data.get("status") != "planning":
+        return
+
+    data["status"] = "in_progress"
+    if write_json(task_json_path, data):
+        print(colored(f"✓ Status: planning → in_progress{label}", Colors.GREEN))
+    else:
+        print(
+            colored(
+                f"Warning: Failed to write {task_json_path}; status stays 'planning'.",
+                Colors.YELLOW,
+            ),
+            file=sys.stderr,
+        )
+
+
 def cmd_start(args: argparse.Namespace) -> int:
     """Set active task."""
     repo_root = get_repo_root()
@@ -129,7 +168,13 @@ def cmd_start(args: argparse.Namespace) -> int:
     # Resolve task directory (supports task name, relative path, or absolute path)
     full_path = resolve_task_dir(task_input, repo_root)
 
-    if not full_path or not full_path.is_dir():
+    if full_path is None:
+        # resolve_task_dir already named the exact reason on stderr. A second,
+        # generic line on stdout would split one diagnosis across two streams
+        # and bury the specific message.
+        return 1
+
+    if not full_path.is_dir():
         print(colored(f"Error: Task not found: {task_input}", Colors.RED))
         print("Hint: Use task name (e.g., 'my-task') or full path (e.g., '.trellis/tasks/01-31-my-task')")
         return 1
@@ -176,11 +221,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 
         # Still flip task.json status: planning → in_progress so downstream phases proceed.
         if task_json_path.is_file():
-            data = read_json(task_json_path)
-            if data and data.get("status") == "planning":
-                data["status"] = "in_progress"
-                if write_json(task_json_path, data):
-                    print(colored("✓ Status: planning → in_progress (degraded)", Colors.GREEN))
+            _flip_status_to_in_progress(task_json_path, " (degraded)")
             run_task_hooks("after_start", task_json_path, repo_root)
         return 0
 
@@ -190,11 +231,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         print(f"Source: {active.source}")
 
         if task_json_path.is_file():
-            data = read_json(task_json_path)
-            if data and data.get("status") == "planning":
-                data["status"] = "in_progress"
-                if write_json(task_json_path, data):
-                    print(colored("✓ Status: planning → in_progress", Colors.GREEN))
+            _flip_status_to_in_progress(task_json_path)
 
         print()
         print(colored("The hook will now inject context from this task's jsonl files.", Colors.BLUE))
@@ -234,8 +271,20 @@ def cmd_current(args: argparse.Namespace) -> int:
 
     if getattr(args, "json", False):
         task_obj = None
+        read_error = None
         if active.task_path:
-            data = read_json(repo_root / active.task_path / FILE_TASK_JSON) or {}
+            task_json_path = repo_root / active.task_path / FILE_TASK_JSON
+            data, reason = read_json_checked(task_json_path)
+            if data is None:
+                # Without this, a corrupt task.json emits null for every field
+                # — indistinguishable from a task whose fields really are null.
+                problem, hint = describe_json_read_failure(task_json_path, reason)
+                read_error = {
+                    "file": str(task_json_path),
+                    "reason": reason,
+                    "message": f"{problem}. {hint}",
+                }
+                data = {}
             task_obj = {
                 "dir": active.task_path,
                 "id": data.get("id") or data.get("name"),
@@ -246,11 +295,15 @@ def cmd_current(args: argparse.Namespace) -> int:
                 "branch": data.get("branch"),
                 "base_branch": data.get("base_branch"),
             }
-        print(json.dumps({
+        payload = {
             "current_task": task_obj,
             "source": active.source,
             "stale": active.stale,
-        }, ensure_ascii=False))
+        }
+        # Only present when the read failed, so the healthy shape is unchanged.
+        if read_error:
+            payload["error"] = read_error
+        print(json.dumps(payload, ensure_ascii=False))
         return 0 if active.task_path else 1
 
     if args.source:
@@ -295,9 +348,11 @@ def cmd_workflow(args: argparse.Namespace) -> int:
         print(colored(f"Error: task.json not found at {task_dir}", Colors.RED))
         return 1
 
-    data = read_json(task_json_path)
-    if not data:
-        print(colored(f"Error: failed to read {task_json_path}", Colors.RED))
+    data, reason = read_json_checked(task_json_path)
+    if data is None:
+        problem, hint = describe_json_read_failure(task_json_path, reason)
+        print(colored(f"Error: {problem}", Colors.RED))
+        print(hint)
         return 1
 
     if args.clear:
@@ -507,11 +562,11 @@ def show_usage() -> None:
     print("""Task Management Script
 
 Usage:
-  python task.py create <title>                     Create new task directory
-  python task.py create <title> --package <pkg>     Create task for a specific package
-  python task.py create <title> --parent <dir>      Create task as child of parent
-  python task.py create <title> --no-start          Create without making it active in this session
-  python task.py create <title> --workflow <id>     Create task pinned to a workflow variant
+  python task.py create <title> --description <desc>  Create new task directory (both required, non-empty)
+  python task.py create <title> --description <desc> --package <pkg>   Create task for a specific package
+  python task.py create <title> --description <desc> --parent <dir>    Create task as child of parent
+  python task.py create <title> --description <desc> --no-start        Create without making it active in this session
+  python task.py create <title> --description <desc> --workflow <id>   Create task pinned to a workflow variant
   python task.py add-context <dir> <jsonl> <path> [reason]  Add entry to jsonl
   python task.py validate <dir>                     Validate jsonl files
   python task.py list-context <dir>                 List jsonl entries
@@ -541,10 +596,10 @@ List options:
   --json               Output machine-readable JSON (also available on `current`)
 
 Examples:
-  python task.py create "Add login feature" --slug add-login
-  python task.py create "Add login feature" --slug add-login --package cli
-  python task.py create "Add login feature" --meta linear=ENG-123 --meta epic=auth
-  python task.py create "Child task" --slug child --parent .trellis/tasks/01-21-parent
+  python task.py create "Add login feature" --description "Email + password sign-in" --slug add-login
+  python task.py create "Add login feature" --description "Email + password sign-in" --slug add-login --package cli
+  python task.py create "Add login feature" --description "Email + password sign-in" --meta linear=ENG-123 --meta epic=auth
+  python task.py create "Child task" --description "Session cookie handling" --slug child --parent .trellis/tasks/01-21-parent
   python task.py add-context <dir> implement .trellis/spec/cli/backend/auth.md "Auth guidelines"
   python task.py set-branch <dir> task/add-login
   python task.py start .trellis/tasks/01-21-add-login
@@ -603,11 +658,15 @@ def main() -> int:
 
     # create
     p_create = subparsers.add_parser("create", help="Create new task")
-    p_create.add_argument("title", help="Task title")
+    p_create.add_argument("title", help="Task title (required, non-empty)")
     p_create.add_argument("--slug", "-s", help="Task slug without the MM-DD date prefix")
     p_create.add_argument("--assignee", "-a", help="Assignee developer")
     p_create.add_argument("--priority", "-p", default="P2", help="Priority (P0-P3)")
-    p_create.add_argument("--description", "-d", help="Task description")
+    p_create.add_argument(
+        "--description",
+        "-d",
+        help="Task description (required, non-empty — an empty one is refused at archive)",
+    )
     p_create.add_argument("--parent", help="Parent task directory (establishes subtask link)")
     p_create.add_argument("--package", help="Package name for monorepo projects")
     p_create.add_argument(
@@ -627,6 +686,11 @@ def main() -> int:
     p_create.add_argument(
         "--workflow",
         help="Workflow variant id for this task (.trellis/workflows/<id>.md)",
+    )
+    p_create.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite task.json when the task directory already exists",
     )
 
     # add-context

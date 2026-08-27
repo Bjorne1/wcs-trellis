@@ -59,7 +59,7 @@ Use child tasks for deliverables that can move through planning, implementation,
 Create new children with:
 
 ```bash
-python ./.trellis/scripts/task.py create "<child title>" --slug <child-slug> --parent <parent-dir>
+python ./.trellis/scripts/task.py create "<child title>" --description "<one-line summary>" --slug <child-slug> --parent <parent-dir>
 ```
 
 Link or unlink existing tasks with:
@@ -106,7 +106,7 @@ Rules:
 ## Common Commands
 
 ```bash
-python ./.trellis/scripts/task.py create "<title>" --slug <slug>
+python ./.trellis/scripts/task.py create "<title>" --description "<one-line summary>" --slug <slug>
 python ./.trellis/scripts/task.py start <task>
 python ./.trellis/scripts/task.py current --source
 python ./.trellis/scripts/task.py add-context <task> implement <file> <reason>
