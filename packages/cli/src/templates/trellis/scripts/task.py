@@ -8,7 +8,7 @@ Usage:
     python task.py add-context <dir> <file> <path> [reason] # Add jsonl entry
     python task.py validate <dir>              # Validate jsonl files
     python task.py list-context <dir>          # List jsonl entries
-    python task.py start <dir>                 # Set active task
+    python task.py start <dir>                 # Set active task, record current branch
     python task.py current [--source] [--json] # Show active task
     python task.py finish                      # Clear active task
     python task.py workflow <id>|--clear       # Set/clear per-task workflow selection
@@ -16,7 +16,8 @@ Usage:
     python task.py set-base-branch <dir> <branch>  # Set PR target branch
     python task.py set-scope <dir> <scope>     # Set scope for PR title
     python task.py set-meta <dir> <key> <value>  # Set a task metadata key
-    python task.py archive <task-dir>          # Archive completed task
+    python task.py rename <dir> <new-slug> [--dry-run]  # Rename task + references
+    python task.py archive <task-dir> [--skip-branch-validation]  # Archive completed task
     python task.py deprecate <task-dir> [--reason <text>]  # Abandon task, then archive
     python task.py list                        # List active tasks
     python task.py list-archive [month]        # List archived tasks
@@ -33,6 +34,7 @@ from pathlib import Path
 
 from common.log import Colors, colored
 from common.paths import (
+    DEVELOPER_HINT,
     DIR_WORKFLOW,
     DIR_TASKS,
     FILE_TASK_JSON,
@@ -49,6 +51,7 @@ from common.active_task import (
     set_active_task,
     write_pending_claim,
 )
+from common.git import current_branch_name
 from common.io import (
     describe_json_read_failure,
     read_json_checked,
@@ -62,6 +65,7 @@ from common.workflow_selection import WORKFLOW_ID_RE, workflow_md_for_task
 from common.task_store import (
     DEFAULT_DEPRECATE_REASON,
     cmd_create,
+    cmd_rename,
     cmd_archive,
     cmd_deprecate,
     cmd_set_branch,
@@ -122,36 +126,90 @@ def cmd_engage(args: argparse.Namespace) -> int:
     return 0
 
 
-def _flip_status_to_in_progress(task_json_path: Path, label: str = "") -> None:
-    """Move a freshly started task from planning to in_progress.
+def _record_start_state(
+    task_json_path: Path,
+    repo_root: Path,
+    label: str = "",
+) -> None:
+    """Move a freshly started task to in_progress and record its branch.
+
+    Both updates share one read/write: the status flip from planning, and the
+    checked-out branch when `branch` is still empty. Recording at start is what
+    keeps `branch` trustworthy at archive time — a task whose branch is only
+    ever set by hand tends to reach archive with `branch: null`.
 
     Tolerant on purpose — a broken task.json does not fail `start`, because the
     session pointer is the point of the command. But the read overwrites the
-    file it just read, so neither failure may be silent: without a message the
+    file it just read, so no failure may be silent: without a message the
     absent status line looks like the task simply was not in planning.
     """
     data, reason = read_json_checked(task_json_path)
     if data is None:
         problem, hint = describe_json_read_failure(task_json_path, reason)
         print(
-            colored(f"Warning: {problem}; status not updated.", Colors.YELLOW),
+            colored(f"Warning: {problem}; task.json not updated.", Colors.YELLOW),
             file=sys.stderr,
         )
         print(hint, file=sys.stderr)
         return
 
-    if data.get("status") != "planning":
+    applied: list[str] = []
+
+    if data.get("status") == "planning":
+        data["status"] = "in_progress"
+        applied.append(f"✓ Status: planning → in_progress{label}")
+
+    # Only fill an empty field: an explicit `set-branch` must survive a later
+    # `start` (re-starting a task after a checkout is a normal thing to do).
+    base_branch_conflict: str | None = None
+    if not data.get("branch"):
+        branch = current_branch_name(repo_root)
+        if branch:
+            data["branch"] = branch
+            applied.append(f"✓ Branch recorded: {branch}{label}")
+            if branch == data.get("base_branch"):
+                base_branch_conflict = branch
+        else:
+            print(
+                colored(
+                    "Note: no checked-out branch (detached HEAD, or not a git "
+                    "repository); task branch not recorded.",
+                    Colors.YELLOW,
+                ),
+                file=sys.stderr,
+            )
+
+    if not applied:
         return
 
-    data["status"] = "in_progress"
-    if write_json(task_json_path, data):
-        print(colored(f"✓ Status: planning → in_progress{label}", Colors.GREEN))
-    else:
+    if not write_json(task_json_path, data):
         print(
             colored(
-                f"Warning: Failed to write {task_json_path}; status stays 'planning'.",
+                f"Warning: Failed to write {task_json_path}; "
+                "status and branch are unchanged.",
                 Colors.YELLOW,
             ),
+            file=sys.stderr,
+        )
+        return
+
+    for line in applied:
+        print(colored(line, Colors.GREEN))
+
+    if base_branch_conflict:
+        # Recorded anyway — the value is true, it just cannot describe a PR.
+        # Archive refuses this shape, so say so now rather than at the gate.
+        print(
+            colored(
+                f"Warning: '{base_branch_conflict}' is also this task's base_branch; "
+                "a PR cannot target its own branch, and archive will refuse it.",
+                Colors.YELLOW,
+            ),
+            file=sys.stderr,
+        )
+        print(
+            f"Once you branch off, run: python3 {DIR_WORKFLOW}/scripts/task.py "
+            "set-branch <task> <feature-branch>",
             file=sys.stderr,
         )
 
@@ -221,7 +279,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 
         # Still flip task.json status: planning → in_progress so downstream phases proceed.
         if task_json_path.is_file():
-            _flip_status_to_in_progress(task_json_path, " (degraded)")
+            _record_start_state(task_json_path, repo_root, " (degraded)")
             run_task_hooks("after_start", task_json_path, repo_root)
         return 0
 
@@ -231,7 +289,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         print(f"Source: {active.source}")
 
         if task_json_path.is_file():
-            _flip_status_to_in_progress(task_json_path)
+            _record_start_state(task_json_path, repo_root)
 
         print()
         print(colored("The hook will now inject context from this task's jsonl files.", Colors.BLUE))
@@ -426,7 +484,10 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     if as_json:
         if filter_mine and not developer:
-            print(json.dumps({"error": "No developer set"}), file=sys.stderr)
+            print(
+                json.dumps({"error": "No developer set", "hint": DEVELOPER_HINT}),
+                file=sys.stderr,
+            )
             return 1
 
         items = []
@@ -454,6 +515,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     if filter_mine:
         if not developer:
             print(colored("Error: No developer set. Run init_developer.py first", Colors.RED), file=sys.stderr)
+            print(DEVELOPER_HINT, file=sys.stderr)
             return 1
         print(colored(f"My tasks (assignee: {developer}):", Colors.BLUE))
     else:
@@ -571,7 +633,7 @@ Usage:
   python task.py validate <dir>                     Validate jsonl files
   python task.py list-context <dir>                 List jsonl entries
   python task.py engage                             Opt this session into the Trellis workflow
-  python task.py start <dir>                        Set active task
+  python task.py start <dir>                        Set active task; records the checked-out branch when unset
   python task.py current [--source]                 Show active task
   python task.py finish                             Clear active task
   python task.py workflow <id>                      Select workflow variant for active task
@@ -580,6 +642,7 @@ Usage:
   python task.py set-base-branch <dir> <branch>     Set PR target branch
   python task.py set-scope <dir> <scope>            Set scope for PR title
   python task.py set-meta <dir> <key> <value>       Set/overwrite a task metadata key
+  python task.py rename <dir> <new-slug>            Rename task, identity fields and references
   python task.py archive <task-dir>                 Archive completed task
   python task.py deprecate <task-dir> [--reason <text>]  Abandon a task, then archive it
   python task.py add-subtask <parent> <child>       Link child task to parent
@@ -589,6 +652,19 @@ Usage:
 
 Monorepo options:
   --package <pkg>      Package name (validated against config.yaml packages)
+
+Rename options:
+  --dry-run            Print the change set without writing anything
+
+Archive options:
+  --no-commit                Skip the auto git commit after archiving
+  --skip-branch-validation   Archive despite missing or self-referential branch metadata.
+                             Archive normally refuses a task with no `branch` when it has a
+                             `base_branch` and the repo has a remote, or with
+                             `branch == base_branch`; repair those with `set-branch` /
+                             `set-base-branch` instead. Use this flag only for tasks that
+                             were never PR-backed. A recorded branch that was merged and
+                             deleted is only a warning and needs no flag.
 
 List options:
   --mine, -m           Show only tasks assigned to current developer
@@ -605,7 +681,10 @@ Examples:
   python task.py start .trellis/tasks/01-21-add-login
   python task.py current --source
   python task.py finish
+  python task.py rename add-login add-sso --dry-run  # Preview the change set
+  python task.py rename add-login add-sso
   python task.py archive add-login
+  python task.py archive add-login --skip-branch-validation  # Task never had a branch of its own
   python task.py add-subtask parent-task child-task  # Link existing tasks
   python task.py remove-subtask parent-task child-task
   python task.py list                               # List all active tasks
@@ -752,10 +831,28 @@ def main() -> int:
     p_setmeta.add_argument("key", help="Metadata key")
     p_setmeta.add_argument("value", help="Metadata value")
 
+    # rename
+    p_rename = subparsers.add_parser("rename", help="Rename task and its references")
+    p_rename.add_argument("name", help="Task directory or name")
+    p_rename.add_argument("new_slug", help="New slug without the MM-DD date prefix")
+    p_rename.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the change set without writing anything",
+    )
+
     # archive
     p_archive = subparsers.add_parser("archive", help="Archive task")
     p_archive.add_argument("name", help="Task directory or name")
     p_archive.add_argument("--no-commit", action="store_true", help="Skip auto git commit after archive")
+    p_archive.add_argument(
+        "--skip-branch-validation",
+        action="store_true",
+        help=(
+            "Archive even when branch metadata is missing or self-referential "
+            "(for tasks that were never PR-backed)"
+        ),
+    )
 
     # deprecate
     p_deprecate = subparsers.add_parser(
@@ -806,6 +903,7 @@ def main() -> int:
         "set-base-branch": cmd_set_base_branch,
         "set-scope": cmd_set_scope,
         "set-meta": cmd_set_meta,
+        "rename": cmd_rename,
         "archive": cmd_archive,
         "deprecate": cmd_deprecate,
         "add-subtask": cmd_add_subtask,

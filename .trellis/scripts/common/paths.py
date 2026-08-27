@@ -12,6 +12,7 @@ Provides:
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,13 @@ FILE_DEVELOPER = ".developer"
 FILE_CURRENT_TASK = ".current-task"
 FILE_TASK_JSON = "task.json"
 FILE_JOURNAL_PREFIX = "journal-"
+
+# Environment override for the developer identity, ahead of the .developer file.
+ENV_DEVELOPER = "TRELLIS_DEVELOPER"
+
+# Appended to every "no developer set" error so the non-obvious source is
+# discoverable from the failure itself.
+DEVELOPER_HINT = f"  Or set {ENV_DEVELOPER}=<your-name> in the environment."
 
 
 # =============================================================================
@@ -66,8 +74,37 @@ def get_repo_root(start_path: Path | None = None) -> Path:
 # Developer
 # =============================================================================
 
+def _read_developer_file(dev_file: Path) -> str | None:
+    """Read the `name=` field out of a .developer file, or None."""
+    if not dev_file.is_file():
+        return None
+
+    try:
+        content = dev_file.read_text(encoding="utf-8")
+    except (OSError, IOError):
+        return None
+
+    for line in content.splitlines():
+        if line.startswith("name="):
+            return line.split("=", 1)[1].strip() or None
+
+    return None
+
+
 def get_developer(repo_root: Path | None = None) -> str | None:
-    """Get developer name from .developer file.
+    """Get the developer name for this checkout.
+
+    Resolution order, first hit wins (a CLI `--assignee` flag overrides all of
+    it, before this function is ever called):
+
+        1. The ``TRELLIS_DEVELOPER`` environment variable.
+        2. ``.trellis/.developer`` in this checkout.
+
+    `.developer` is gitignored on purpose — it carries a personal identity and
+    no tracked file should — so a checkout that has never run
+    init_developer.py has no identity of its own. The environment variable is
+    the way to supply one without writing the file, which is what a
+    short-lived or scripted checkout needs.
 
     Args:
         repo_root: Repository root path. Defaults to auto-detected.
@@ -75,23 +112,14 @@ def get_developer(repo_root: Path | None = None) -> str | None:
     Returns:
         Developer name or None if not initialized.
     """
+    env_name = os.environ.get(ENV_DEVELOPER, "").strip()
+    if env_name:
+        return env_name
+
     if repo_root is None:
         repo_root = get_repo_root()
 
-    dev_file = repo_root / DIR_WORKFLOW / FILE_DEVELOPER
-
-    if not dev_file.is_file():
-        return None
-
-    try:
-        content = dev_file.read_text(encoding="utf-8")
-        for line in content.splitlines():
-            if line.startswith("name="):
-                return line.split("=", 1)[1].strip()
-    except (OSError, IOError):
-        pass
-
-    return None
+    return _read_developer_file(repo_root / DIR_WORKFLOW / FILE_DEVELOPER)
 
 
 def get_developer_workflow(repo_root: Path | None = None) -> str | None:

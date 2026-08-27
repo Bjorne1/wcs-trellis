@@ -509,6 +509,39 @@ def _canonical_task_ref(task_path: str, repo_root: Path) -> str | None:
         return None
 
 
+def _relative_task_ref(task_path: str, repo_root: Path) -> str:
+    """Repo-relative posix ref for a task path that need not exist.
+
+    `_canonical_task_ref` resolves through the filesystem and so refuses a task
+    directory that has been moved away. Rename needs to name both sides of the
+    move, one of which is always absent.
+    """
+    normalized = normalize_task_ref(task_path)
+    if not normalized:
+        return ""
+    candidate = Path(normalized)
+    if not candidate.is_absolute():
+        return normalized
+    try:
+        resolved = candidate.resolve()
+        root = repo_root.resolve()
+        workflow_real = (root / DIR_WORKFLOW).resolve()
+    except OSError:
+        return ""
+    try:
+        return resolved.relative_to(root).as_posix()
+    except ValueError:
+        pass
+    # Same dual-base containment as resolve_task_ref: a path through a
+    # symlinked `.trellis` (#567) maps back to its in-repo form; anything
+    # outside both bases is refused rather than stored as an absolute pointer.
+    try:
+        rel = resolved.relative_to(workflow_real)
+    except ValueError:
+        return ""
+    return (Path(DIR_WORKFLOW) / rel).as_posix()
+
+
 def _active_from_ref(
     task_ref: str | None,
     repo_root: Path,
@@ -945,6 +978,52 @@ def _clear_task_from_pending_claims(target: str, repo_root: Path) -> None:
             continue
         claim.pop("current_task", None)
         _write_json(claim_path, claim)
+
+
+def repoint_task_in_sessions(old_path: str, new_path: str, repo_root: Path) -> int:
+    """Move every session pointer from `old_path` to `new_path`.
+
+    Rename is the one lifecycle step where the task survives under a different
+    name, so clearing the pointers (what archive does) would be wrong: the user
+    would silently lose their active task and have to run `task.py start`
+    again to get context injection back. Repointing keeps the session valid
+    across the rename.
+
+    Both stores are covered. A pending claim carries a `current_task` too — it
+    is what an `engage` in a shell with no session identity leaves behind — and
+    leaving that one naming the old directory reintroduces the dangling pointer
+    for the session that later adopts the claim.
+    """
+    # Not `_canonical_task_ref`: the caller repoints *after* moving the
+    # directory, so `old_path` no longer exists and canonicalization — which
+    # requires an existing directory — would return None for exactly the ref we
+    # need to match.
+    target = _relative_task_ref(old_path, repo_root)
+    replacement = _relative_task_ref(new_path, repo_root)
+    if not target or not replacement:
+        return 0
+
+    moved = 0
+    for store_dir in (_runtime_sessions_dir(repo_root), _runtime_pending_dir(repo_root)):
+        if not store_dir.is_dir():
+            continue
+        for record_path in sorted(store_dir.glob("*.json")):
+            record = _read_json(record_path)
+            if not record:
+                continue
+            current = _string_value(record.get("current_task"))
+            if not current:
+                continue
+            current_ref = _canonical_task_ref(
+                current, repo_root
+            ) or _relative_task_ref(current, repo_root)
+            if current_ref != target:
+                continue
+            record["current_task"] = replacement
+            if _write_json(record_path, record):
+                moved += 1
+
+    return moved
 
 
 def get_current_task_source(
