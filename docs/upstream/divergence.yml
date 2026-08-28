@@ -33,6 +33,7 @@ entries:
       - packages/cli/package.json
       - packages/core/package.json
       - pnpm-lock.yaml
+      - .lintstagedrc
       - README.md
       - README_CN.md
       - CONTRIBUTING.md

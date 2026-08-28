@@ -155,18 +155,23 @@ def check(policy: dict, divergence: dict) -> int:
 
     # 1. tag 命名空间隔离是否完好。少了 tagOpt，fetch 的 tag auto-following
     #    会把上游 tag 塞回 refs/tags/ 根，隔离就白做了。
-    cfg = git("config", "--get-regexp", r"^remote\.upstream\.")
-    if "--no-tags" not in cfg:
+    up_cfg = git("config", "--get-regexp", r"^remote\.upstream\.")
+    if "--no-tags" not in up_cfg:
         problems.append("remote.upstream.tagOpt 不是 --no-tags：上游 tag 会污染根命名空间")
-    if "refs/tags/upstream/*" not in cfg:
+    if "refs/tags/upstream/*" not in up_cfg:
         problems.append("remote.upstream.fetch 缺少 +refs/tags/*:refs/tags/upstream/* refspec")
+    # origin 上还存着 147 个继承来的上游 tag。少了这一项，任何 fetch origin 都会把
+    # 它们抓回根命名空间——隔离第一次就是这样被悄悄撤销的。
+    if "--no-tags" not in git("config", "--get-regexp", r"^remote\.origin\."):
+        problems.append("remote.origin.tagOpt 不是 --no-tags：origin 上的上游 tag 会回流")
 
-    # 2. 撞名检测：fork 自有 tag 与上游 tag 同名。
-    fork_tags = set(git("tag", "--list", "v*").split())
-    up_tags = {r.split("/", 1)[1] for r in git(
-        "for-each-ref", "--format=%(refname:short)", "refs/tags/upstream/*").split()}
+    # 2. 撞名检测。必须走完整 ref 路径：`git tag -l v*` 的 pattern 会匹配 refname
+    #    的尾段，把 upstream/v0.6.16 也算成根命名空间的 tag。
+    refs = git("for-each-ref", "--format=%(refname)", "refs/tags/").split()
+    fork_tags = {r[len("refs/tags/") :] for r in refs if not r.startswith("refs/tags/upstream/")}
+    up_tags = {r[len("refs/tags/upstream/") :] for r in refs if r.startswith("refs/tags/upstream/")}
     for name in sorted(fork_tags & up_tags):
-        problems.append(f"tag 撞名：v{name} 同时存在于 fork 与上游命名空间")
+        problems.append(f"tag 撞名：{name} 同时在根命名空间与 upstream/ 命名空间")
 
     # 3. 每条改造是否还真的存在。不同点消失 = 改造被覆盖或已被上游吸收。
     for entry in divergence["entries"]:

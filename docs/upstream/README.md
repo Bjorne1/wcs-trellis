@@ -25,10 +25,20 @@ merge 吸收上游改动，因为上游那 20 个非 Claude/Codex 平台的代�
 remote.upstream.tagOpt = --no-tags
 remote.upstream.fetch  = +refs/heads/*:refs/remotes/upstream/*
 remote.upstream.fetch  = +refs/tags/*:refs/tags/upstream/*
+remote.origin.tagOpt   = --no-tags
 ```
 
-`tagOpt = --no-tags` 是必需的另一半：少了它，fetch 的 tag auto-following 会把上游 tag
-直接写进 `refs/tags/` 根，上游发到 0.8.x 时就与 fork 已发布的版本号撞名。
+前两项里 `tagOpt = --no-tags` 是必需的另一半：少了它，fetch 的 tag auto-following 会把上游
+tag 直接写进 `refs/tags/` 根，上游发到 0.8.x 时就与 fork 已发布的版本号撞名。
+
+`remote.origin.tagOpt` 同样必需，而且更容易被忽略：**origin 上还存着 147 个继承来的上游
+tag**，只隔离 upstream 不管 origin 时，任何 `git fetch origin` 都会把它们全部抓回根命名空间，
+把清理悄悄撤销掉。第一次做隔离就是这样失败的——删干净之后一次 fetch origin 就全回来了，
+而且当时没人发现。代价是 fork 自己的 tag 也不再从 origin 自动抓；要在另一个检出里取某个
+版本 tag，得显式指定：`git fetch origin refs/tags/v0.8.1:refs/tags/v0.8.1`。
+
+根治还需要删掉 origin 上那 147 个 tag，否则新克隆仍会带回它们（`git clone` 默认抓全部 tag）。
+删除远端 tag 会让基于它们建的 GitHub release 失效，是不可逆操作，需要单独授权。
 
 两个不能碰的命令：
 
@@ -37,8 +47,9 @@ remote.upstream.fetch  = +refs/tags/*:refs/tags/upstream/*
 - **`git push --tags` / `--follow-tags`** —— 会把 147 个 `upstream/*` tag 推到 origin。
   `packages/cli/scripts/release.js` 已改为按全名精确推送本次 tag。
 
-origin 上仍有一批早年推上去的上游 tag（迁移时未清理，删除会让基于它们建的 GitHub
-release 失效，属于不可逆的远端操作）。本地已经干净，不影响 triage。
+另外 `git tag -l 'v*'` **不能**用来数根命名空间的 tag：git 的 ref pattern 会匹配 refname 的
+尾段，`v*` 把 `upstream/v0.6.16` 也算进来，结果是 156 而不是 9。要精确判断请用
+`git for-each-ref refs/tags/` 再按 `upstream/` 前缀分流，`--check` 就是这么做的。
 
 ## 每轮流程
 

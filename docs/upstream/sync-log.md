@@ -39,3 +39,18 @@ cherry-pick 的 `-x` 尾注和 git 祖先关系承担，不在这里重复记账
 
 **还没做**：这 6 条未决，所以本轮没有打 `git merge -s ours refs/tags/upstream/v0.6.16`。
 清空 REVIEW 后再打，同时把 `policy.yml` 的 `divergence_baseline` 保持在 v0.6.16 或前移。
+
+**隔离第一次失败又修好的经过**（值得记住的坑）
+
+删掉根命名空间那 147 个 tag 之后，只隔离了 `remote.upstream`，没管 `remote.origin`。
+origin 上存着同样的 147 个继承 tag，而 origin 没有 `tagOpt = --no-tags`，于是一次
+`git fetch origin` 就把它们全抓回了根命名空间——`refs/tags/v0.6.16` 的 mtime 比
+`refs/tags/upstream/v0.6.16` 晚半小时，就是这次回流留下的痕迹。
+
+当时没有立刻发现，因为验证用的是 `git tag -l 'v*'`：git 的 ref pattern 会匹配 refname 的
+尾段，`upstream/v0.6.16` 也算命中，所以那条命令数出来的既不是 9 也不是 156，取决于
+匹配到什么，根本不能用来判断隔离状态。
+
+修法：`remote.origin.tagOpt = --no-tags`，重新清理，然后**真的跑一次 `git fetch origin`
+验证不再回流**。`--check` 现在把 origin 的 tagOpt 也纳入检查，撞名检测改走完整 ref 路径。
+根治仍需删掉 origin 上那 147 个 tag（不可逆，待授权）。
