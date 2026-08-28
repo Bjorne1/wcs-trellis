@@ -53,4 +53,9 @@ origin 上存着同样的 147 个继承 tag，而 origin 没有 `tagOpt = --no-t
 
 修法：`remote.origin.tagOpt = --no-tags`，重新清理，然后**真的跑一次 `git fetch origin`
 验证不再回流**。`--check` 现在把 origin 的 tagOpt 也纳入检查，撞名检测改走完整 ref 路径。
-根治仍需删掉 origin 上那 147 个 tag（不可逆，待授权）。
+
+**origin 侧清理**：147 个继承 tag 已从 origin 删除，远端只剩 fork 自己的 9 个
+（v0.7.1 ~ v0.8.1）。删除前确认过两件事：147 个 tag 在 origin 上的 sha 与
+`inherited-tags.txt` 快照逐条一致（回滚可用它重推），且 `gh release list` 为空——
+仓库没有任何 GitHub release 挂在这些 tag 上，删除零副作用。`tagOpt = --no-tags`
+保留作为防御纵深，代价是 fork tag 不再从 origin 自动抓（README 有显式命令）。

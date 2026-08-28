@@ -31,14 +31,19 @@ remote.origin.tagOpt   = --no-tags
 前两项里 `tagOpt = --no-tags` 是必需的另一半：少了它，fetch 的 tag auto-following 会把上游
 tag 直接写进 `refs/tags/` 根，上游发到 0.8.x 时就与 fork 已发布的版本号撞名。
 
-`remote.origin.tagOpt` 同样必需，而且更容易被忽略：**origin 上还存着 147 个继承来的上游
-tag**，只隔离 upstream 不管 origin 时，任何 `git fetch origin` 都会把它们全部抓回根命名空间，
-把清理悄悄撤销掉。第一次做隔离就是这样失败的——删干净之后一次 fetch origin 就全回来了，
-而且当时没人发现。代价是 fork 自己的 tag 也不再从 origin 自动抓；要在另一个检出里取某个
-版本 tag，得显式指定：`git fetch origin refs/tags/v0.8.1:refs/tags/v0.8.1`。
+`remote.origin.tagOpt` 同样必需，而且更容易被忽略：origin 上曾经存着同样的 147 个继承
+上游 tag，只隔离 upstream 不管 origin 时，任何 `git fetch origin` 都会把它们全部抓回根命名
+空间，把清理悄悄撤销掉。第一次做隔离就是这样失败的——删干净之后一次 fetch origin 就全
+回来了，而且当时没人发现。
 
-根治还需要删掉 origin 上那 147 个 tag，否则新克隆仍会带回它们（`git clone` 默认抓全部 tag）。
-删除远端 tag 会让基于它们建的 GitHub release 失效，是不可逆操作，需要单独授权。
+origin 上那 147 个继承 tag 已经删除（2026-08-28），远端现在只有 fork 自己的 9 个
+（v0.7.1 ~ v0.8.1），所以回流的源头没有了。`tagOpt = --no-tags` 仍然保留，作为防御纵深：
+将来谁误推一次上游 tag 到 origin，本地根命名空间也不会被污染。代价是 fork 自己的 tag 不再
+从 origin 自动抓，要在另一个检出里取某个版本得显式指定：
+
+```bash
+git fetch origin refs/tags/v0.8.1:refs/tags/v0.8.1
+```
 
 两个不能碰的命令：
 
