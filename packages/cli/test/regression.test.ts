@@ -7342,6 +7342,83 @@ describe("regression: current-task path normalization", () => {
     expect(fs.existsSync(path.join(tmpDir, "src"))).toBe(true);
   });
 
+  it("[deprecate] task.py deprecate refuses unarchivable branch metadata before writing anything", () => {
+    // cmd_deprecate prepends the banner and writes meta.deprecated, then
+    // delegates to cmd_archive. Once archive gained a branch-metadata gate
+    // (#578), a refusal down there left the task reading as abandoned while
+    // still sitting in the active tree — and no flag could get it out.
+    setupTaskRepo();
+    initTaskGitRepo("main", true);
+    patchIssue106Task({ branch: null, base_branch: "main" });
+    const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
+    const prdPath = path.join(
+      tmpDir,
+      ".trellis",
+      "tasks",
+      "issue-106",
+      "prd.md",
+    );
+    const prdBefore = fs.readFileSync(prdPath, "utf-8");
+
+    const result = spawnSync(
+      pythonCmd,
+      [taskScriptPath, "deprecate", "issue-106", "--reason", "wrong turn"],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Not deprecated");
+    // Nothing written: no banner, no meta, task still active.
+    expect(fs.readFileSync(prdPath, "utf-8")).toBe(prdBefore);
+    const data = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, ".trellis", "tasks", "issue-106", "task.json"),
+        "utf-8",
+      ),
+    ) as { meta?: Record<string, unknown> };
+    expect(data.meta?.deprecated).toBeUndefined();
+    expect(
+      fs.existsSync(path.join(tmpDir, ".trellis", "tasks", "issue-106")),
+    ).toBe(true);
+  });
+
+  it("[deprecate] task.py deprecate --skip-branch-validation completes the deprecation", () => {
+    setupTaskRepo();
+    initTaskGitRepo("main", true);
+    patchIssue106Task({ branch: null, base_branch: "main" });
+    const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
+
+    const result = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "deprecate",
+        "issue-106",
+        "--reason",
+        "wrong turn",
+        "--no-commit",
+        "--skip-branch-validation",
+      ],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".trellis", "tasks", "issue-106")),
+    ).toBe(false);
+
+    const archiveRoot = path.join(tmpDir, ".trellis", "tasks", "archive");
+    const yearMonth = fs.readdirSync(archiveRoot)[0];
+    const archived = path.join(archiveRoot, yearMonth, "issue-106");
+    const data = JSON.parse(
+      fs.readFileSync(path.join(archived, "task.json"), "utf-8"),
+    ) as { meta?: Record<string, unknown> };
+    expect(data.meta?.deprecated).toBe(true);
+    expect(
+      fs.readFileSync(path.join(archived, "prd.md"), "utf-8"),
+    ).toContain("## DEPRECATED");
+  });
+
 });
 
 describe("regression: backslash in markdown templates (beta.12)", () => {

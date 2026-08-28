@@ -891,6 +891,14 @@ def main() -> int:
     p_deprecate.add_argument("name", help="Task directory or name")
     p_deprecate.add_argument("--reason", help=f"Why it is abandoned (default: {DEFAULT_DEPRECATE_REASON})")
     p_deprecate.add_argument("--no-commit", action="store_true", help="Skip auto git commit after archive")
+    p_deprecate.add_argument(
+        "--skip-branch-validation",
+        action="store_true",
+        help=(
+            "Deprecate even when branch metadata is missing or self-referential "
+            "(for tasks that were never PR-backed)"
+        ),
+    )
 
     # list
     p_list = subparsers.add_parser("list", help="List tasks")

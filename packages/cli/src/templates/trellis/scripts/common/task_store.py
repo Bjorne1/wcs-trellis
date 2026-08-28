@@ -1669,6 +1669,29 @@ def cmd_deprecate(args: argparse.Namespace) -> int:
     reason = (getattr(args, "reason", None) or "").strip() or DEFAULT_DEPRECATE_REASON
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # Archive's branch gate, run here first. cmd_archive checks it too, but by
+    # then this command has already prepended the banner and written
+    # meta.deprecated — a refusal down there leaves a task that reads as
+    # abandoned while still sitting in the active tree. `--skip-branch-validation`
+    # is accepted for the same reason archive accepts it, and is forwarded.
+    # A stale-branch warning can print twice on the success path; that is the
+    # price of keeping one validation implementation instead of two.
+    precheck_data, precheck_reason = read_json_checked(task_json_path)
+    if precheck_data is None:
+        _report_read_failure(task_json_path, precheck_reason)
+        return 1
+    if not _validate_branch_metadata(
+        precheck_data,
+        task_name,
+        repo_root,
+        getattr(args, "skip_branch_validation", False),
+    ):
+        print(
+            f"Not deprecated: {_repo_relative_path(task_dir, repo_root)} is unchanged.",
+            file=sys.stderr,
+        )
+        return 1
+
     marked = [
         name for name in DEPRECATE_DOC_FILES
         if _prepend_deprecated_marker(task_dir / name, today, reason)

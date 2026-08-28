@@ -400,6 +400,60 @@ function removePath(absPath: string): void {
   fs.rmSync(absPath, { recursive: true, force: true });
 }
 
+/**
+ * Errno values Windows raises for a rename whose source is momentarily held
+ * open by someone else — an indexer or a virus scanner walking the tree this
+ * code has just finished writing. POSIX does not produce them for a rename
+ * inside one filesystem, so a retry there costs a bounded delay on an error
+ * that was going to be fatal anyway rather than masking a different bug.
+ */
+const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const RENAME_RETRY_BACKOFF_MS = [50, 150, 400];
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * `fs.renameSync` with a bounded retry on the Windows transient-handle errnos.
+ *
+ * Every commit point in this module is a rename of a fully-written temporary
+ * path over its destination, which is what makes the operation atomic. On
+ * Windows that rename fails outright while any handle on the source is open,
+ * and a freshly written tree is exactly what a scanner opens — observed as
+ * `EPERM` on the transaction-directory rename in `stageAblationTransaction`.
+ * Failing there is safe (the caller unwinds) but it makes `trellis ablate`
+ * fail for a reason that clears itself milliseconds later.
+ *
+ * The retry is never silent: when the attempts run out, the thrown error names
+ * how many were made, so a persistent permission problem cannot read as a
+ * one-off.
+ */
+function renameSyncWithRetry(source: string, destination: string): void {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      fs.renameSync(source, destination);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (
+        !RENAME_RETRY_CODES.has(code) ||
+        attempt >= RENAME_RETRY_BACKOFF_MS.length
+      ) {
+        if (attempt > 0) {
+          throw new Error(
+            `rename ${source} -> ${destination} failed with ${code} after ` +
+              `${attempt + 1} attempts`,
+            { cause: error },
+          );
+        }
+        throw error;
+      }
+      sleepSync(RENAME_RETRY_BACKOFF_MS[attempt] as number);
+    }
+  }
+}
+
 function makeExternalTreeRemovable(absPath: string): void {
   const stat = lstatIfPresent(absPath);
   if (!stat || stat.isSymbolicLink()) return;
@@ -542,7 +596,7 @@ export function stageAblationTransaction(
       verifyBackupEntry(tempPaths.transactionDir, entry);
     }
     writeState(tempPaths, state);
-    fs.renameSync(tempPaths.transactionDir, paths.transactionDir);
+    renameSyncWithRetry(tempPaths.transactionDir, paths.transactionDir);
   } catch (error) {
     removeExternalTransactionDir(tempPaths.transactionDir);
     throw error;
@@ -783,7 +837,7 @@ function restoreEntry(
         }
         fs.unlinkSync(tempPath);
       } else {
-        fs.renameSync(tempPath, destination);
+        renameSyncWithRetry(tempPath, destination);
       }
     } catch (error) {
       try {
@@ -864,7 +918,7 @@ function restoreEntry(
       }
     }
     if (!verifyExpectedState) removePath(destination);
-    fs.renameSync(tempPath, destination);
+    renameSyncWithRetry(tempPath, destination);
   } catch (error) {
     removePath(tempPath);
     if (verifyExpectedState) {
