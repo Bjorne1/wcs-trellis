@@ -12,6 +12,8 @@ Run this only on an explicit request to drop a task: `废弃` / `放弃` / `方�
 
 No-op when the session already ran an entry point; the step that makes Step 2 see the active task when it did not.
 
+`✓ Trellis engaged (pending session binding)` is success, not a warning: this shell exposes no session identity, so the opt-in was recorded as a pending claim and the next hook run binds it to this session. The per-turn breadcrumb starts from the next message; the rest of this command still resolves the active task normally.
+
 ## Step 2: Confirm the target
 
 ```bash

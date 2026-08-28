@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,7 +33,23 @@ DIR_SHELL_TICKETS = "shell-tickets"
 # `sessions/` file count that `_resolve_single_session_fallback` depends on
 # exactly as it was.
 DIR_ENGAGED = "engaged"
+# Pending claims: workflow intent recorded by a shell child that has no session
+# identity of its own. Codex is the case that forced this to exist — its shell
+# children carry no session id (`CODEX_THREAD_ID` is injected only on the unix
+# escalation path, not on the ordinary sandboxed exec path), so `task.py engage`
+# there could never write `engaged/<key>.json` and every injection hook stayed
+# silent for the whole session. Hooks DO receive a session id on stdin, so the
+# shell writes intent without identity and the next hook run binds it —
+# `promote_pending_claim`. Decision made in the same spirit as the deleted
+# shell-ticket bridge, with the direction reversed: there the hook wrote and the
+# shell read, here the shell writes and the hook reads.
+DIR_PENDING = "pending"
 SHELL_TICKET_TTL_SECONDS = 30
+# A claim outlives a shell ticket by a lot. A ticket bridged two processes inside
+# one tool call; a claim waits for the next hook run, which on a UserPromptSubmit
+# hook means the user's next message — human-paced. 30 minutes covers that and
+# still stops a claim abandoned at end of day from being inherited tomorrow.
+PENDING_CLAIM_TTL_SECONDS = 1800
 TASK_SESSION_COMMANDS = {"start", "current", "finish", "engage"}
 
 _SESSION_KEYS = ("session_id", "sessionId", "sessionID")
@@ -81,6 +98,8 @@ class ActiveTask:
             return f"session:{self.context_key}"
         if self.source_type == "session-fallback" and self.context_key:
             return f"session-fallback:{self.context_key}"
+        if self.source_type == "pending":
+            return "pending-claim"
         return self.source_type
 
 
@@ -146,6 +165,10 @@ def _runtime_sessions_dir(repo_root: Path) -> Path:
 
 def _runtime_engaged_dir(repo_root: Path) -> Path:
     return repo_root / DIR_WORKFLOW / DIR_RUNTIME / DIR_ENGAGED
+
+
+def _runtime_pending_dir(repo_root: Path) -> Path:
+    return repo_root / DIR_WORKFLOW / DIR_RUNTIME / DIR_PENDING
 
 
 def _sanitize_key(raw: str) -> str:
@@ -490,6 +513,139 @@ def _engaged_path(repo_root: Path, context_key: str) -> Path:
     return _runtime_engaged_dir(repo_root) / f"{context_key}.json"
 
 
+def _claim_is_fresh(claim: dict[str, Any], claim_path: Path, now: float) -> bool:
+    created_at = claim.get("created_at_epoch")
+    if not isinstance(created_at, (int, float)):
+        # A claim with no timestamp can never age out, and an immortal claim is
+        # precisely the cross-session leak the TTL exists to prevent. Delete it
+        # rather than honour it.
+        _remove_file(claim_path)
+        return False
+    if now - created_at > PENDING_CLAIM_TTL_SECONDS:
+        _remove_file(claim_path)
+        return False
+    return True
+
+
+def _read_single_fresh_claim(repo_root: Path) -> tuple[Path, dict[str, Any]] | None:
+    """Return the sole fresh pending claim for this repo, or None.
+
+    Same "exactly one match or nothing" rule the shell-ticket bridge used, for
+    the same reason: two windows that both lack session identity write two
+    claims, and both must then resolve nothing rather than one inheriting the
+    other's engagement or task pointer. Expired and unreadable claims are
+    deleted as they are seen, so the directory cannot accumulate.
+    """
+    pending_dir = _runtime_pending_dir(repo_root)
+    if not pending_dir.is_dir():
+        return None
+
+    now = time.time()
+    matches: list[tuple[Path, dict[str, Any]]] = []
+    for claim_path in sorted(pending_dir.glob("*.json")):
+        claim = _read_json(claim_path)
+        if claim is None:
+            _remove_file(claim_path)
+            continue
+        if not _claim_is_fresh(claim, claim_path, now):
+            continue
+        matches.append((claim_path, claim))
+
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def write_pending_claim(
+    repo_root: Path,
+    *,
+    engaged: bool | None = None,
+    current_task: str | None = None,
+) -> Path | None:
+    """Record workflow intent that could not be keyed to a session.
+
+    Merges into the sole fresh claim when one exists instead of adding a second
+    file: an entry point runs `task.py engage` and then `task.py start` in the
+    same turn, and two claims would trip the exactly-one rule in
+    `_read_single_fresh_claim` — the command would defeat itself.
+
+    Returns the claim path, or None when the runtime directory is not writable.
+    """
+    existing = _read_single_fresh_claim(repo_root)
+    if existing is not None:
+        claim_path, claim = existing
+    else:
+        claim_path = _runtime_pending_dir(repo_root) / f"{uuid.uuid4().hex}.json"
+        claim = {"created_at_epoch": time.time(), "created_at": _utc_now()}
+
+    claim["cwd"] = str(Path.cwd())
+    if engaged is not None:
+        claim["engaged"] = engaged
+    if current_task is not None:
+        claim["current_task"] = current_task
+
+    if not _write_json(claim_path, claim):
+        return None
+    return claim_path
+
+
+def promote_pending_claim(
+    repo_root: Path,
+    platform_input: dict[str, Any] | None = None,
+    platform: str | None = None,
+) -> str | None:
+    """Bind a pending claim to this session's real identity, exactly once.
+
+    Called by the injection hooks — the only processes that reliably know the
+    session id, because it arrives on stdin. Everything the shell child could not
+    write (`engaged/<key>.json`, `sessions/<key>.json`) is written here, and the
+    claim is then deleted so no second session can inherit it. From that point on
+    the session uses ordinary per-session state and multi-window isolation is
+    back in force.
+
+    Returns the context key it bound to, or None when there was nothing to do:
+    no claim, ambiguous claims, or no identity in this process either.
+    """
+    context_key = resolve_context_key(platform_input, platform)
+    if not context_key:
+        return None
+
+    existing = _read_single_fresh_claim(repo_root)
+    if existing is None:
+        return None
+    claim_path, claim = existing
+
+    if claim.get("engaged") is True:
+        engaged_path = _engaged_path(repo_root, context_key)
+        record = _read_json(engaged_path) or {}
+        record.update(_context_metadata(platform_input, platform, context_key))
+        record["engaged"] = True
+        # Preserve when the user actually opted in, not when the hook noticed.
+        record.setdefault(
+            "engaged_at", _string_value(claim.get("created_at")) or _utc_now()
+        )
+        record["engaged_via"] = "pending-claim"
+        if not _write_json(engaged_path, record):
+            # Leave the claim in place: a failed write must be retried on the
+            # next hook run, not silently dropped.
+            return None
+
+    task_ref = _string_value(claim.get("current_task"))
+    if task_ref:
+        canonical = _canonical_task_ref(task_ref, repo_root)
+        if canonical:
+            context_path = _context_path(repo_root, context_key)
+            context = _read_json(context_path) or {}
+            context.update(_context_metadata(platform_input, platform, context_key))
+            context["current_task"] = canonical
+            context.setdefault("current_run", None)
+            if not _write_json(context_path, context):
+                return None
+
+    _remove_file(claim_path)
+    return context_key
+
+
 def resolve_active_task(
     repo_root: Path,
     platform_input: dict[str, Any] | None = None,
@@ -500,11 +656,12 @@ def resolve_active_task(
 ) -> ActiveTask:
     """Resolve the active task from session runtime state only.
 
-    A stale session task is returned as stale. Missing context identity or a
-    missing/empty session context falls back to single-session inference: if
-    exactly one session file exists in the runtime, return its task with
-    source_type="session-fallback" — covers pull-based sub-agents that don't
-    inherit the parent's session id. ≥2
+    A stale session task is returned as stale. Missing context identity falls
+    back, in order, to the pending claim this repo's own shell children wrote
+    (source_type="pending" — explicit intent, so it outranks inference) and then
+    to single-session inference: if exactly one session file exists in the
+    runtime, return its task with source_type="session-fallback" — covers
+    pull-based sub-agents that don't inherit the parent's session id. ≥2
     files or 0 files yield ActiveTask(None) — refuses to guess across windows.
     """
     context_key = resolve_context_key(
@@ -518,6 +675,24 @@ def resolve_active_task(
         active = _active_from_ref(task_ref, repo_root, "session", context_key)
         if active:
             return active
+    elif allow_environment_context:
+        # No identity in this process. On Codex that is every shell child, so
+        # `task.py start` could only record a claim — read it back, otherwise a
+        # `get_context.py` call later in the SAME turn would report no active
+        # task for a task the user just started.
+        #
+        # Gated on `allow_environment_context` because a claim is ambient repo
+        # state, and a caller that passed False asked to resolve identity from
+        # its payload alone. `inject-subagent-context.py` is that caller: it
+        # isolates a sub-agent to its parent's session id on purpose, and a claim
+        # leaking in would undo the isolation.
+        claim = _read_single_fresh_claim(repo_root)
+        if claim is not None:
+            active = _active_from_ref(
+                _string_value(claim[1].get("current_task")), repo_root, "pending"
+            )
+            if active:
+                return active
 
     if allow_single_session_fallback:
         fallback = _resolve_single_session_fallback(repo_root)
@@ -623,10 +798,17 @@ def is_session_engaged(
     inheriting engagement from a file another window left behind is exactly the
     failure the opt-in model exists to prevent. A new session that never ran an
     entry point must stay silent even while a task is mid-flight.
+
+    The pending claim is not such an inheritance and IS honoured: it is this
+    repo's own explicit opt-in, written moments ago by a shell child that had no
+    identity to key it with, and it is only read when this process has no
+    identity either — which for a hook means the platform gave it none, and
+    reporting False there is what made Trellis unusable on Codex.
     """
     context_key = resolve_context_key(platform_input, platform)
     if not context_key:
-        return False
+        claim = _read_single_fresh_claim(repo_root)
+        return bool(claim is not None and claim[1].get("engaged") is True)
     record = _read_json(_engaged_path(repo_root, context_key)) or {}
     return record.get("engaged") is True
 
@@ -668,7 +850,19 @@ def clear_active_task(
     """Clear the active task by deleting its resolved session context file."""
     context_key = resolve_context_key(platform_input, platform)
     if not context_key:
-        return ActiveTask(None, "none")
+        # Unbound session: the pointer lives in the pending claim, so clear it
+        # there. Leaving it would let a later hook run promote a task the user
+        # already finished, resurrecting the pointer one turn after `finish`.
+        existing = _read_single_fresh_claim(repo_root)
+        if existing is None:
+            return ActiveTask(None, "none")
+        claim_path, claim = existing
+        task_ref = _string_value(claim.get("current_task"))
+        if not task_ref:
+            return ActiveTask(None, "none")
+        claim.pop("current_task", None)
+        _write_json(claim_path, claim)
+        return _active_from_ref(task_ref, repo_root, "pending") or ActiveTask(None, "none")
 
     previous = resolve_active_task(repo_root, platform_input, platform)
     if not previous.task_path or not previous.context_key:
@@ -681,12 +875,18 @@ def clear_active_task(
 
 
 def clear_task_from_sessions(task_path: str, repo_root: Path) -> int:
-    """Delete all session runtime files that point at a task."""
+    """Delete all session runtime files that point at a task.
+
+    Pending claims are scrubbed too: an archived task left in a claim would be
+    promoted into a fresh session pointer on the next hook run, so `archive`
+    would appear to undo itself.
+    """
     target = _canonical_task_ref(task_path, repo_root) or normalize_task_ref(task_path)
     if not target:
         return 0
 
     cleared = 0
+    _clear_task_from_pending_claims(target, repo_root)
     sessions_dir = _runtime_sessions_dir(repo_root)
     if not sessions_dir.is_dir():
         return cleared
@@ -703,6 +903,31 @@ def clear_task_from_sessions(task_path: str, repo_root: Path) -> int:
             cleared += 1
 
     return cleared
+
+
+def _clear_task_from_pending_claims(target: str, repo_root: Path) -> None:
+    """Drop `current_task` from every claim that points at `target`.
+
+    Every claim is examined, not just the sole fresh one: the exactly-one rule
+    governs which claim may be *believed*, but a stale pointer has to be scrubbed
+    wherever it sits or it comes back the moment the ambiguity clears.
+    """
+    pending_dir = _runtime_pending_dir(repo_root)
+    if not pending_dir.is_dir():
+        return
+
+    for claim_path in sorted(pending_dir.glob("*.json")):
+        claim = _read_json(claim_path)
+        if claim is None:
+            continue
+        current = _string_value(claim.get("current_task"))
+        if not current:
+            continue
+        current_ref = _canonical_task_ref(current, repo_root) or normalize_task_ref(current)
+        if current_ref != target:
+            continue
+        claim.pop("current_task", None)
+        _write_json(claim_path, claim)
 
 
 def get_current_task_source(

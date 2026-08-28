@@ -10,7 +10,9 @@ Wrap up the current session: archive the active task (and any other completed-bu
 
 Context injection is opt-in, so this is a no-op when the session already ran an entry point and the step that makes the rest of this command see the active task when it did not.
 
-If this exits non-zero, **stop and report it** — without session identity the active-task pointer cannot be resolved and Step 3 would archive the wrong thing or nothing.
+`✓ Trellis engaged (pending session binding)` is success, not a warning: this shell exposes no session identity, so the opt-in was recorded as a pending claim and the next hook run binds it to this session. The per-turn breadcrumb starts from the next message; the rest of this command still resolves the active task normally.
+
+If this exits non-zero — which now means only that `.trellis/.runtime/` is not writable — **stop and report it**: the active-task pointer cannot be resolved and Step 3 would archive the wrong thing or nothing.
 
 ## Step 2: Survey current state
 

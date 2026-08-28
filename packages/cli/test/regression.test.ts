@@ -1668,6 +1668,32 @@ describe("regression: current-task path normalization", () => {
     );
   }
 
+  /**
+   * Read every pending claim in the fixture, newest-agnostic and sorted by
+   * filename so assertions are stable. A claim is what a shell child writes when
+   * the platform gives it no session identity — `task.py engage` / `task.py
+   * start` on Codex, where nothing in the exec environment carries a session id.
+   */
+  function readPendingClaims(): Array<Record<string, unknown>> {
+    const pendingDir = path.join(tmpDir, ".trellis", ".runtime", "pending");
+    if (!fs.existsSync(pendingDir)) return [];
+    return fs
+      .readdirSync(pendingDir)
+      .filter((name) => name.endsWith(".json"))
+      .sort()
+      .map(
+        (name) =>
+          JSON.parse(
+            fs.readFileSync(path.join(pendingDir, name), "utf-8"),
+          ) as Record<string, unknown>,
+      );
+  }
+
+  /** Absolute path of a `.runtime` subtree entry, for existence assertions. */
+  function runtimePath(...segments: string[]): string {
+    return path.join(tmpDir, ".trellis", ".runtime", ...segments);
+  }
+
   const SESSION_ENV_KEYS = [
     "TRELLIS_CONTEXT_ID",
     "DSH_TRELLIS_CONTEXT_ID",
@@ -1793,11 +1819,13 @@ describe("regression: current-task path normalization", () => {
     return content ?? "";
   }
 
-  it("[session-current-task] task.py start without context key enters degraded mode (returns 0, no pointer)", () => {
+  it("[session-current-task] task.py start without context key records a pending claim (returns 0, no session pointer)", () => {
     // 0.5.3 hotfix: task.py start no longer hard-fails when no session identity
-    // is available (Windows + Claude Code, --continue resume, etc.). Instead it
-    // prints a degraded-mode warning and returns 0 so the AI workflow can
-    // proceed.
+    // is available. 0.7.7: it no longer merely warns either — it records a
+    // pending claim, so a `get_context.py` call later in the SAME turn still
+    // resolves the task, and the next hook run binds the pointer to the real
+    // session. Codex is the platform that forced this: none of its shell
+    // children carry a session id.
     setupTaskRepo();
     const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
 
@@ -1810,21 +1838,24 @@ describe("regression: current-task path normalization", () => {
       },
     );
 
-    expect(output).toContain("Session identity not available");
-    expect(output).toContain("degraded");
-    expect(output).toContain("conversation context");
-    expect(output).toContain("TRELLIS_CONTEXT_ID");
+    expect(output).toContain("pending session binding");
+    expect(output).toContain(".trellis/tasks/issue-106");
 
-    // No active-task pointer written
+    // No per-session pointer — that is the whole point of the claim.
     expect(fs.existsSync(path.join(tmpDir, ".trellis", ".current-task"))).toBe(
       false,
     );
-    expect(fs.existsSync(path.join(tmpDir, ".trellis", ".runtime"))).toBe(
-      false,
-    );
+    expect(
+      fs.existsSync(path.join(tmpDir, ".trellis", ".runtime", "sessions")),
+    ).toBe(false);
 
-    // task.json.status remains in_progress (was already in_progress; degraded
-    // mode preserves the existing status when not planning)
+    const claims = readPendingClaims();
+    expect(claims).toHaveLength(1);
+    expect(claims[0].current_task).toBe(".trellis/tasks/issue-106");
+    expect(typeof claims[0].created_at_epoch).toBe("number");
+
+    // task.json.status remains in_progress (was already in_progress; the claim
+    // path preserves the existing status when not planning)
     const taskJsonPath = path.join(
       tmpDir,
       ".trellis",
@@ -1836,8 +1867,8 @@ describe("regression: current-task path normalization", () => {
     expect(taskJson.status).toBe("in_progress");
   });
 
-  it("[session-current-task] task.py start in degraded mode flips planning → in_progress", () => {
-    // Verify the status flip path of degraded mode by setting up a task with
+  it("[session-current-task] task.py start without a context key still flips planning → in_progress", () => {
+    // Verify the status flip path of the claim branch by setting up a task with
     // status=planning explicitly, then asserting the flip happened without a
     // session identity being available.
     setupTaskRepo();
@@ -2078,10 +2109,16 @@ describe("regression: current-task path normalization", () => {
     expect(taskJson.description).toBe("");
   });
 
-  it("[workflow-state-r7] task.py create degrades silently without session identity (no .runtime side effect)", () => {
+  it("[workflow-state-r7] task.py create without session identity records a pending claim, not a session pointer", () => {
     // R7 contract: best-effort activation. No context key (CLI shell with no
-    // session env) → task is still created, but no .runtime/sessions/ file is
-    // written. Pre-R7 behavior parity for headless CLI usage.
+    // session env, or any shell child on Codex) → the task is still created and
+    // no .runtime/sessions/ file is written.
+    //
+    // 0.7.7 additionally records the pointer as a pending claim, so a task
+    // created on a platform whose shell children have no session id still
+    // becomes active once a hook binds it. The claim carries `current_task`
+    // only — never `engaged` — so creating a task from a plain terminal cannot
+    // opt the next AI session into the workflow behind the user's back.
     writeTrellisScripts();
     writeProjectFile(
       path.join(".trellis", ".developer"),
@@ -2106,6 +2143,11 @@ describe("regression: current-task path normalization", () => {
       const files = fs.readdirSync(sessionsDir);
       expect(files).toEqual([]);
     }
+
+    const claims = readPendingClaims();
+    expect(claims).toHaveLength(1);
+    expect(claims[0].current_task).toBe(`.trellis/tasks/${taskDir}`);
+    expect(claims[0].engaged).toBeUndefined();
   });
 
   it("[workflow-state-r7] task.py create then task.py start is idempotent (pointer + status flip)", () => {
@@ -2967,6 +3009,182 @@ describe("regression: current-task path normalization", () => {
         JSON.stringify({ cwd: tmpDir, session_id: "fresh-window" }),
       ).trim(),
     ).toBe("");
+  });
+
+  // ---------------------------------------------------------------------
+  // Pending engagement claims
+  //
+  // The opt-in model decided engagement in a shell child and consumed it in a
+  // hook. On Codex the shell child has no session identity at all — nothing in
+  // its exec environment carries a session id — so `task.py engage` could never
+  // write `engaged/<key>.json`. It exited 1, all three injection hooks stayed
+  // silent for the whole session, and the user had no way to recover. A shell
+  // child now records the intent as a pending claim; the hook, which does
+  // receive `session_id` on stdin, binds it and deletes it.
+  // ---------------------------------------------------------------------
+
+  function runTaskPy(args: string[], envOverrides: NodeJS.ProcessEnv = {}): string {
+    const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
+    return execSync(
+      [pythonCmd, taskScriptPath, ...args]
+        .map((part) => JSON.stringify(part))
+        .join(" "),
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv(envOverrides) },
+    );
+  }
+
+  function writeCodexWorkflowStateHook(): string {
+    const relPath = path.join(".codex", "hooks", "inject-workflow-state.py");
+    writeProjectFile(
+      relPath,
+      expectTemplateContent(injectWorkflowStateScript, "inject-workflow-state"),
+    );
+    return relPath;
+  }
+
+  function writeClaim(name: string, claim: Record<string, unknown>): void {
+    writeProjectFile(
+      path.join(".trellis", ".runtime", "pending", name),
+      JSON.stringify(claim, null, 2),
+    );
+  }
+
+  it("[pending-claim] task.py engage without session identity succeeds instead of exiting 1", () => {
+    setupTaskRepo();
+
+    // execSync throws on a non-zero exit, so this call is itself the assertion
+    // that the Codex-breaking hard failure is gone.
+    const output = runTaskPy(["engage"]);
+
+    expect(output).toContain("pending session binding");
+    expect(output).not.toContain("cannot engage");
+    const claims = readPendingClaims();
+    expect(claims).toHaveLength(1);
+    expect(claims[0].engaged).toBe(true);
+    expect(typeof claims[0].created_at_epoch).toBe("number");
+  });
+
+  it("[pending-claim] engage then start merge into one claim so the exactly-one rule still holds", () => {
+    setupTaskRepo();
+    runTaskPy(["engage"]);
+    runTaskPy(["start", ".trellis/tasks/issue-106"]);
+
+    // Two files here would make every claim ambiguous and the entry point would
+    // defeat itself: `_read_single_fresh_claim` honours exactly one.
+    const claims = readPendingClaims();
+    expect(claims).toHaveLength(1);
+    expect(claims[0].engaged).toBe(true);
+    expect(claims[0].current_task).toBe(".trellis/tasks/issue-106");
+  });
+
+  it("[pending-claim] task.py current resolves the task through the claim in the same turn", () => {
+    setupTaskRepo();
+    runTaskPy(["engage"]);
+    runTaskPy(["start", ".trellis/tasks/issue-106"]);
+
+    const output = runTaskPy(["current", "--source"]);
+
+    expect(output).toContain(".trellis/tasks/issue-106");
+    expect(output).toContain("pending-claim");
+  });
+
+  it("[pending-claim] the per-turn hook binds the claim to the real session and opens the gate", () => {
+    setupTaskRepo();
+    const hookPath = writeCodexWorkflowStateHook();
+    runTaskPy(["engage"]);
+    runTaskPy(["start", ".trellis/tasks/issue-106"]);
+
+    const output = runPython(
+      hookPath,
+      JSON.stringify({ cwd: tmpDir, session_id: "thread-abc", prompt: "继续" }),
+    );
+
+    expect(output).toContain("<workflow-state>");
+
+    const engaged = JSON.parse(
+      fs.readFileSync(runtimePath("engaged", "codex_thread-abc.json"), "utf-8"),
+    );
+    expect(engaged.engaged).toBe(true);
+    expect(engaged.engaged_via).toBe("pending-claim");
+
+    const session = JSON.parse(
+      fs.readFileSync(runtimePath("sessions", "codex_thread-abc.json"), "utf-8"),
+    );
+    expect(session.current_task).toBe(".trellis/tasks/issue-106");
+
+    // Consumed exactly once — the claim must not outlive its binding.
+    expect(readPendingClaims()).toHaveLength(0);
+  });
+
+  it("[pending-claim] a consumed claim cannot engage a second session", () => {
+    setupTaskRepo();
+    const hookPath = writeCodexWorkflowStateHook();
+    runTaskPy(["engage"]);
+    runTaskPy(["start", ".trellis/tasks/issue-106"]);
+    runPython(hookPath, JSON.stringify({ cwd: tmpDir, session_id: "thread-abc" }));
+
+    // The session file left behind by the promoted session is the only one,
+    // which is exactly when `resolve_active_task`'s single-session fallback
+    // would hand its task over. Engagement has no such fallback, and the claim
+    // that could have granted it is gone.
+    expect(
+      runPython(
+        hookPath,
+        JSON.stringify({ cwd: tmpDir, session_id: "other-thread" }),
+      ).trim(),
+    ).toBe("");
+  });
+
+  it("[pending-claim] two claims resolve nothing and promote nothing", () => {
+    setupTaskRepo();
+    const hookPath = writeCodexWorkflowStateHook();
+    runTaskPy(["engage"]);
+    // A second window that also has no session identity. Both must degrade
+    // rather than one inheriting the other's engagement.
+    writeClaim("second.json", {
+      created_at_epoch: Date.now() / 1000,
+      engaged: true,
+      current_task: ".trellis/tasks/issue-106",
+    });
+
+    expect(
+      runPython(
+        hookPath,
+        JSON.stringify({ cwd: tmpDir, session_id: "ambiguous" }),
+      ).trim(),
+    ).toBe("");
+    expect(readPendingClaims()).toHaveLength(2);
+    expect(fs.existsSync(runtimePath("engaged"))).toBe(false);
+  });
+
+  it("[pending-claim] an expired or timestampless claim is ignored and deleted", () => {
+    setupTaskRepo();
+    const hookPath = writeCodexWorkflowStateHook();
+    // PENDING_CLAIM_TTL_SECONDS is 1800; one second past it must not bind.
+    writeClaim("stale.json", {
+      created_at_epoch: Date.now() / 1000 - 1801,
+      engaged: true,
+      current_task: ".trellis/tasks/issue-106",
+    });
+    // No timestamp at all would be an immortal claim — the exact cross-session
+    // leak the TTL exists to prevent.
+    writeClaim("notime.json", { engaged: true });
+
+    expect(
+      runPython(hookPath, JSON.stringify({ cwd: tmpDir, session_id: "late" })).trim(),
+    ).toBe("");
+    expect(readPendingClaims()).toHaveLength(0);
+    expect(fs.existsSync(runtimePath("engaged"))).toBe(false);
+  });
+
+  it("[pending-claim] no claim is written when the platform does expose session identity", () => {
+    setupTaskRepo();
+
+    const output = runTaskPy(["engage"], { TRELLIS_CONTEXT_ID: "codex_fixed" });
+
+    expect(output).toContain("codex_fixed");
+    expect(fs.existsSync(runtimePath("engaged", "codex_fixed.json"))).toBe(true);
+    expect(readPendingClaims()).toHaveLength(0);
   });
 
 

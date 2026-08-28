@@ -232,6 +232,29 @@ def _resolve_context_key(trellis_dir: Path, input_data: dict) -> str | None:
     return resolve_context_key(input_data, platform=_detect_platform(input_data))
 
 
+def _promote_pending_claim(trellis_dir: Path, input_data: dict) -> None:
+    """Bind a shell-written engagement/pointer claim to this session.
+
+    Shell children on some platforms carry no session id — every one of them on
+    Codex — so `task.py engage` / `task.py start` can only record intent there.
+    This hook does have the id, because it arrives on stdin, so this is where the
+    claim becomes real per-session state. Absent on a project whose
+    `.trellis/scripts` predates claims; that is not an error, just nothing to do.
+    """
+    scripts_dir = trellis_dir / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.active_task import promote_pending_claim  # type: ignore[import-not-found]
+    except ImportError:
+        return
+    promote_pending_claim(
+        trellis_dir.parent,
+        input_data,
+        platform=_detect_platform(input_data),
+    )
+
+
 def _is_session_engaged(trellis_dir: Path, input_data: dict) -> bool:
     """Whether this session opted into the Trellis workflow.
 
@@ -866,6 +889,11 @@ def main():
     #
     # An engaged session still re-enters here on /clear and /compact, which is
     # the point: compaction drops the workflow context a long task depends on.
+    #
+    # Promotion runs before the gate, never after: a claim written by a shell
+    # child that had no identity is only ever readable as engagement once it has
+    # been bound to this session's key.
+    _promote_pending_claim(trellis_dir, hook_input)
     if not _is_session_engaged(trellis_dir, hook_input):
         sys.exit(0)
 

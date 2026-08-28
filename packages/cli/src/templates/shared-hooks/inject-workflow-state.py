@@ -117,6 +117,26 @@ def _resolve_active_task(root: Path, input_data: dict):
     return resolve_active_task(root, input_data, platform=_detect_platform(input_data))
 
 
+def _promote_pending_claim(root: Path, input_data: dict) -> None:
+    """Bind a shell-written engagement/pointer claim to this session.
+
+    Shell children on some platforms carry no session id — every one of them on
+    Codex — so `task.py engage` / `task.py start` can only record intent there.
+    This hook does have the id, because it arrives on stdin, and it runs on every
+    user prompt, so it is the workhorse that turns those claims into real
+    per-session state. Absent on a project whose `.trellis/scripts` predates
+    claims; that is not an error, just nothing to do.
+    """
+    scripts_dir = root / ".trellis" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.active_task import promote_pending_claim  # type: ignore[import-not-found]
+    except ImportError:
+        return
+    promote_pending_claim(root, input_data, platform=_detect_platform(input_data))
+
+
 def _is_session_engaged(root: Path, input_data: dict) -> bool:
     """Whether this session opted into the Trellis workflow.
 
@@ -430,6 +450,12 @@ def main() -> int:
     # Opt-in gate, ahead of every read below: a session that never invoked an
     # entry point gets no breadcrumb, and does not pay the task-resolution and
     # workflow.md reads either.
+    #
+    # Promotion runs first: on a platform whose shell children have no session
+    # id, `task.py engage` could only leave a claim, and this is the run that
+    # turns it into `engaged/<key>.json`. Without this line the gate below would
+    # be permanently closed on Codex.
+    _promote_pending_claim(root, data)
     if not _is_session_engaged(root, data):
         return 0
 

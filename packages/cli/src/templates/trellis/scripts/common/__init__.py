@@ -88,7 +88,9 @@ from .active_task import (
     clear_active_task,
     is_session_engaged,
     mark_session_engaged,
+    promote_pending_claim,
     resolve_active_task,
     resolve_context_key,
     set_active_task,
+    write_pending_claim,
 )

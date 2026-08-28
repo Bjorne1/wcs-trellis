@@ -14,7 +14,9 @@ Context injection is opt-in: until Step 1 runs, this session receives no Trellis
 
 Marks this session as Trellis-managed, which turns on the per-turn workflow breadcrumb and re-injection after `/clear` or `/compact`.
 
-If this exits non-zero, **stop and report it**. Without the flag every later phase runs unguided, and the planning and commit gates will not be enforced.
+`✓ Trellis engaged (pending session binding)` is success, not a warning: this shell exposes no session identity, so the opt-in was recorded as a pending claim and the next hook run binds it to this session. The per-turn breadcrumb starts from the next message; the rest of this command still resolves the active task normally.
+
+If this exits non-zero — which now means only that `.trellis/.runtime/` is not writable — **stop and report it**. Without the flag every later phase runs unguided, and the planning and commit gates will not be enforced.
 
 ## Step 2: Load the workflow
 

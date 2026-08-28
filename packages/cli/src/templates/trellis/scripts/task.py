@@ -46,6 +46,7 @@ from common.active_task import (
     resolve_active_task,
     resolve_context_key,
     set_active_task,
+    write_pending_claim,
 )
 from common.io import read_json, write_json
 from common.task_utils import resolve_task_dir, run_task_hooks
@@ -85,22 +86,35 @@ def cmd_engage(args: argparse.Namespace) -> int:
         print(colored(f"✓ Trellis engaged for this session: {context_key}", Colors.GREEN))
         return 0
 
-    # Unlike `start`, engage has no useful degraded mode: without a persisted
-    # flag both context-injection hooks stay silent for the whole session, so
-    # every later phase would run without the per-turn breadcrumb that enforces
-    # the planning and commit gates. Fail loudly instead of half-working.
-    print(colored("Error: cannot engage — no session identity available", Colors.RED))
+    # No session identity in this shell child. That is not an anomaly — it is
+    # every shell child on Codex, whose exec path injects no session id at all.
+    # Failing here (what this command used to do) made the entire workflow
+    # unusable on that platform: no engaged flag means all three injection hooks
+    # stay silent for the whole session, with no way for the user to recover.
+    # Record the intent instead. The hooks DO get a session id on stdin, and the
+    # next hook run binds this claim to it (`promote_pending_claim`), after which
+    # the session holds ordinary per-session state.
+    claim_path = write_pending_claim(repo_root, engaged=True)
+    if claim_path is None:
+        print(colored(
+            "Error: cannot engage — no session identity, and the pending claim "
+            "could not be written",
+            Colors.RED,
+        ))
+        print(colored(
+            f"Check that {repo_root / DIR_WORKFLOW / '.runtime'} is writable.",
+            Colors.YELLOW,
+        ))
+        return 1
+
+    print(colored("✓ Trellis engaged (pending session binding)", Colors.GREEN))
     print(colored(
-        "The engaged flag is keyed by session, so without an identity the "
-        "context-injection hooks cannot tell this session opted in.",
+        "This shell exposes no session identity, so the opt-in was recorded as a "
+        "pending claim. The next hook run binds it to this session; the per-turn "
+        "breadcrumb starts from the next message.",
         Colors.YELLOW,
     ))
-    print(colored(
-        "Hint: run inside an AI session whose hooks are active, or set "
-        "TRELLIS_CONTEXT_ID before running task.py engage.",
-        Colors.YELLOW,
-    ))
-    return 1
+    return 0
 
 
 def cmd_start(args: argparse.Namespace) -> int:
@@ -139,20 +153,26 @@ def cmd_start(args: argparse.Namespace) -> int:
     task_json_path = full_path / FILE_TASK_JSON
 
     if not resolve_context_key():
-        # Degraded mode: no session identity available.
-        # Hook didn't inject TRELLIS_CONTEXT_ID (common on Windows + Claude Code,
-        # --continue resume path, fork distribution, hooks disabled, etc.). Skip
-        # per-session pointer write; AI continues based on conversation context.
-        print(colored(
-            "ℹ Session identity not available; active-task pointer not persisted "
-            "this session (degraded mode). AI continues based on conversation context.",
-            Colors.YELLOW,
-        ))
-        print(colored(
-            "Hint: run inside an AI IDE/session that exposes session identity, "
-            "or set TRELLIS_CONTEXT_ID before running task.py start.",
-            Colors.YELLOW,
-        ))
+        # No session identity available (Codex shell children, Windows + Claude
+        # Code, --continue resume path, hooks disabled, ...). The per-session
+        # pointer cannot be written from here, so record it as a pending claim:
+        # shell commands later in this same turn resolve the task through the
+        # claim, and the next hook run promotes it to a real session pointer.
+        claim_path = write_pending_claim(repo_root, current_task=task_dir)
+        if claim_path is None:
+            print(colored(
+                "ℹ Session identity not available and the pending claim could not "
+                "be written; active-task pointer not persisted (degraded mode). "
+                "AI continues based on conversation context.",
+                Colors.YELLOW,
+            ))
+        else:
+            print(colored(f"✓ Current task recorded (pending session binding): {task_dir}", Colors.GREEN))
+            print(colored(
+                "This shell exposes no session identity; the next hook run binds "
+                "the pointer to this session.",
+                Colors.YELLOW,
+            ))
 
         # Still flip task.json status: planning → in_progress so downstream phases proceed.
         if task_json_path.is_file():

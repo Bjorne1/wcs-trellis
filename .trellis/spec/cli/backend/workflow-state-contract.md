@@ -69,27 +69,31 @@ Both regexes MUST use the `\1` backreference variant — `[workflow-state:([A-Za
 1. On every UserPromptSubmit (or platform equivalent — see hook reachability
    matrix below), the hook receives stdin JSON containing `cwd`.
 2. It walks up from `cwd` to find `.trellis/`. If none, exit 0.
-3. It calls `common.active_task.is_session_engaged()`. If this session never
+3. It calls `common.active_task.promote_pending_claim()`. This runs **before**
+   the gate in step 4, and it is what makes the gate openable at all on a
+   platform whose shell children carry no session id. See "Pending claims"
+   below.
+4. It calls `common.active_task.is_session_engaged()`. If this session never
    opted in — no `.trellis/.runtime/engaged/<context_key>.json` written by
    `task.py engage`, which `trellis-start` / `trellis-continue` /
    `trellis-finish-work` run as their first step — exit 0 with no output, ahead
    of every read below. `is_session_engaged` has **no** single-session fallback,
    unlike `resolve_active_task`: another window's leftover file must never
    engage this session.
-4. It calls `common.active_task.resolve_active_task()` to look up the
+5. It calls `common.active_task.resolve_active_task()` to look up the
    per-session active task. If absent → status is the pseudo `no_task`. If
    the pointer is stale (task dir deleted) → status is `stale_<source_type>`.
-5. Otherwise it reads `task.json.status` from the resolved task directory.
-6. It resolves the workflow file (per-task resolution order below: the
+6. Otherwise it reads `task.json.status` from the resolved task directory.
+7. It resolves the workflow file (per-task resolution order below: the
    active task's `.trellis/workflows/<id>.md` when selected, else
    `.trellis/workflow.md`) and parses every `[workflow-state:STATUS]` block.
-7. Codex may map `planning` / `in_progress` to `planning-inline` /
+8. Codex may map `planning` / `in_progress` to `planning-inline` /
    `in_progress-inline` based on `codex.dispatch_mode`; all other platforms
    use the plain status.
-8. It looks up the current status in the parsed map. If found → emits the
+9. It looks up the current status in the parsed map. If found → emits the
    block body in `<workflow-state>...</workflow-state>`. If not found →
    emits the generic line `Refer to workflow.md for current step.`
-9. The output JSON has shape:
+10. The output JSON has shape:
 
    ```json
    {"hookSpecificOutput": {
@@ -114,6 +118,71 @@ Both regexes MUST use the `\1` backreference variant — `[workflow-state:([A-Za
    selector in `inject-workflow-state.py` (and any future port if
    the new platform shares its `chat.message`-style envelope). Do NOT
    hardcode `UserPromptSubmit` at any new emission site.
+
+---
+
+## Pending claims — how engagement reaches a session with no shell identity
+
+Engagement is *decided* in a shell child (`task.py engage`) and *consumed* in a
+hook. Those two processes do not have the same access to session identity, and on
+one registered platform they have opposite access:
+
+| | Session id in a hook | Session id in a shell child |
+|---|---|---|
+| Claude Code | `session_id` on stdin | `CLAUDE_CODE_SESSION_ID`, plus the `$CLAUDE_ENV_FILE` `TRELLIS_CONTEXT_ID` bridge |
+| Codex | `session_id` on stdin | **none** — `CODEX_THREAD_ID` exists only on the unix escalation path (`core/src/tools/runtimes/shell/unix_escalation.rs`), not on the ordinary exec path |
+
+So on Codex `task.py engage` cannot key `engaged/<context_key>.json` to anything.
+It used to exit 1 and say so, which left every injection hook silent for the
+whole session with no recovery — the workflow was unusable on that platform.
+
+The mechanism, in `common/active_task.py`:
+
+- **Write (shell side).** `write_pending_claim()` records the intent in
+  `.trellis/.runtime/pending/<uuid>.json` — `{created_at_epoch, created_at, cwd,
+  engaged?, current_task?}`. Callers: `task.py engage` (`engaged: true`),
+  `task.py start` and `cmd_create` (`current_task` only).
+- **Read (shell side, same turn).** `resolve_active_task()` consults the claim
+  when no context key resolves, reporting `source_type="pending"` — so a
+  `get_context.py` call later in the same turn still sees the task the entry
+  point just started. It ranks above the single-session fallback: an explicit
+  claim outranks an inference. `is_session_engaged()` reads it on the same
+  condition.
+- **Promote (hook side).** `promote_pending_claim()` writes
+  `engaged/<key>.json` (`engaged_via: "pending-claim"`, `engaged_at` preserved
+  from the claim) and/or `sessions/<key>.json`, then deletes the claim. Called
+  first thing by `inject-workflow-state.py` and both `session-start.py` copies,
+  ahead of the engagement gate.
+
+Invariants, each load-bearing:
+
+- **Exactly one fresh claim, or nothing.** Two windows without shell identity
+  write two claims and then *both* degrade — the same rule the deleted
+  shell-ticket bridge used, and the reason multi-window isolation survives.
+- **`engage` and `start` merge into one claim.** They run back to back in one
+  turn; two files would trip the rule above and the entry point would defeat
+  itself.
+- **TTL 1800s** (`PENDING_CLAIM_TTL_SECONDS`), and a claim with no
+  `created_at_epoch` is deleted rather than honoured — an immortal claim is
+  exactly the cross-session leak the TTL exists to prevent.
+- **Consumed exactly once.** Promotion deletes the claim, so a second session
+  cannot inherit engagement from it.
+- **Only `engage` sets `engaged`.** `start` / `create` claims carry
+  `current_task` alone, so running them from a plain terminal can hand the next
+  AI session a pointer but can never opt it into the workflow.
+- **`finish` and `archive` scrub the claim's pointer**
+  (`clear_active_task`, `_clear_task_from_pending_claims`) — otherwise the next
+  hook run would promote a task the user already closed.
+
+Promotion is deliberately *not* wired to a Codex `PostToolUse` hook for
+same-turn effect. It buys nothing: the entry point's own later commands read the
+claim directly, and the breadcrumb is a per-turn artifact anyway. It would cost
+a new hook registration and another one-time `/hooks` TUI approval.
+
+**Test invariant**: `test/regression.test.ts` `[pending-claim] …` — eight cases
+covering engage-succeeds, claim merging, same-turn resolution, promotion,
+single-consumption, ambiguity refusal, TTL, and the untouched
+identity-available path.
 
 ---
 

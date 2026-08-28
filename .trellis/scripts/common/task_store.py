@@ -456,7 +456,11 @@ def cmd_create(args: argparse.Namespace) -> int:
         )
     else:
         try:
-            from .active_task import resolve_context_key, set_active_task
+            from .active_task import (
+                resolve_context_key,
+                set_active_task,
+                write_pending_claim,
+            )
         except Exception as exc:
             print(
                 colored(f"Warning: session activation unavailable (import failed: {exc})", Colors.YELLOW),
@@ -471,13 +475,33 @@ def cmd_create(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
             else:
-                # No session identity is the normal CLI-outside-an-AI-session
-                # case (see comment above) — stay silent, not a failure.
-                if context_key:
+                try:
+                    rel_dir = task_dir.relative_to(repo_root).as_posix()
+                except ValueError:
+                    rel_dir = str(task_dir)
+
+                # No session identity is normal, not a failure: it is every
+                # shell child on Codex, and any CLI run outside an AI session.
+                # Record the pointer as a pending claim so the next hook run can
+                # bind it — without this the planning breadcrumb would never fire
+                # for a task created on such a platform. The claim carries only
+                # `current_task`, never `engaged`, so it cannot opt a session
+                # into the workflow behind the user's back.
+                if not context_key:
                     try:
-                        rel_dir = task_dir.relative_to(repo_root).as_posix()
-                    except ValueError:
-                        rel_dir = str(task_dir)
+                        claim_path = write_pending_claim(repo_root, current_task=rel_dir)
+                    except Exception as exc:
+                        print(
+                            colored(f"Warning: session activation failed (pending claim: {exc})", Colors.YELLOW),
+                            file=sys.stderr,
+                        )
+                    else:
+                        if claim_path:
+                            print(
+                                colored(f"Activated task (pending session binding): {rel_dir}", Colors.GREEN),
+                                file=sys.stderr,
+                            )
+                else:
                     try:
                         active = set_active_task(rel_dir, repo_root)
                     except Exception as exc:
