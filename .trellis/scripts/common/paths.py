@@ -12,6 +12,7 @@ Provides:
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,13 @@ FILE_DEVELOPER = ".developer"
 FILE_CURRENT_TASK = ".current-task"
 FILE_TASK_JSON = "task.json"
 FILE_JOURNAL_PREFIX = "journal-"
+
+# Environment override for the developer identity, ahead of the .developer file.
+ENV_DEVELOPER = "TRELLIS_DEVELOPER"
+
+# Appended to every "no developer set" error so the non-obvious source is
+# discoverable from the failure itself.
+DEVELOPER_HINT = f"  Or set {ENV_DEVELOPER}=<your-name> in the environment."
 
 
 # =============================================================================
@@ -66,8 +74,37 @@ def get_repo_root(start_path: Path | None = None) -> Path:
 # Developer
 # =============================================================================
 
+def _read_developer_file(dev_file: Path) -> str | None:
+    """Read the `name=` field out of a .developer file, or None."""
+    if not dev_file.is_file():
+        return None
+
+    try:
+        content = dev_file.read_text(encoding="utf-8")
+    except (OSError, IOError):
+        return None
+
+    for line in content.splitlines():
+        if line.startswith("name="):
+            return line.split("=", 1)[1].strip() or None
+
+    return None
+
+
 def get_developer(repo_root: Path | None = None) -> str | None:
-    """Get developer name from .developer file.
+    """Get the developer name for this checkout.
+
+    Resolution order, first hit wins (a CLI `--assignee` flag overrides all of
+    it, before this function is ever called):
+
+        1. The ``TRELLIS_DEVELOPER`` environment variable.
+        2. ``.trellis/.developer`` in this checkout.
+
+    `.developer` is gitignored on purpose — it carries a personal identity and
+    no tracked file should — so a checkout that has never run
+    init_developer.py has no identity of its own. The environment variable is
+    the way to supply one without writing the file, which is what a
+    short-lived or scripted checkout needs.
 
     Args:
         repo_root: Repository root path. Defaults to auto-detected.
@@ -75,23 +112,14 @@ def get_developer(repo_root: Path | None = None) -> str | None:
     Returns:
         Developer name or None if not initialized.
     """
+    env_name = os.environ.get(ENV_DEVELOPER, "").strip()
+    if env_name:
+        return env_name
+
     if repo_root is None:
         repo_root = get_repo_root()
 
-    dev_file = repo_root / DIR_WORKFLOW / FILE_DEVELOPER
-
-    if not dev_file.is_file():
-        return None
-
-    try:
-        content = dev_file.read_text(encoding="utf-8")
-        for line in content.splitlines():
-            if line.startswith("name="):
-                return line.split("=", 1)[1].strip()
-    except (OSError, IOError):
-        pass
-
-    return None
+    return _read_developer_file(repo_root / DIR_WORKFLOW / FILE_DEVELOPER)
 
 
 def get_developer_workflow(repo_root: Path | None = None) -> str | None:
@@ -287,29 +315,47 @@ def resolve_task_ref(task_ref: str, repo_root: Path | None = None) -> Path | Non
     if not normalized:
         return None
 
+    try:
+        root = repo_root.resolve()
+    except OSError:
+        return None
+
     path_obj = Path(normalized)
     if path_obj.is_absolute():
         candidate = path_obj
     elif normalized.startswith(f"{DIR_WORKFLOW}/"):
-        candidate = repo_root / path_obj
+        candidate = root / path_obj
     else:
-        candidate = repo_root / DIR_WORKFLOW / DIR_TASKS / path_obj
+        candidate = root / DIR_WORKFLOW / DIR_TASKS / path_obj
 
     # resolve() collapses `..` and follows symlinks, so a task directory that
     # links outside the repo is refused too. Both sides are resolved because
     # repo_root itself may sit behind a symlink (/tmp on macOS does).
     try:
         resolved = candidate.resolve()
-        root = repo_root.resolve()
+        workflow_real = (root / DIR_WORKFLOW).resolve()
     except OSError:
         return None
 
     try:
         resolved.relative_to(root)
+        return resolved
+    except ValueError:
+        pass
+
+    # `.trellis` may itself be a symlink into a store outside the repo (#567).
+    # The workflow dir's own real location is then a second legitimate
+    # containment base: a ref through that link never left the workflow tree.
+    # A ref that escapes BOTH bases (traversal, absolute path elsewhere, a
+    # task dir symlinked out of the tree) is still refused.
+    try:
+        rel = resolved.relative_to(workflow_real)
     except ValueError:
         return None
 
-    return resolved
+    # Map back to the in-repo (lexical) form so callers store the same
+    # repo-relative ref as in the non-symlinked layout.
+    return root / DIR_WORKFLOW / rel
 
 
 def get_current_task(

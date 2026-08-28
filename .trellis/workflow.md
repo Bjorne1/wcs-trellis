@@ -53,8 +53,10 @@ python ./.trellis/scripts/task.py list [--mine] [--status <s>]
 python ./.trellis/scripts/task.py list-archive
 
 # Code-spec context (injected into implement/check agents via JSONL).
-# `implement.jsonl` / `check.jsonl` are seeded on `task create` for sub-agent-capable
-# platforms; the AI curates real spec + research entries during planning when needed.
+# `implement.jsonl` / `check.jsonl` are seeded (empty) on `task create` for sub-agent-capable
+# platforms; the AI curates real spec + research entries during planning. `validate` fails
+# and `start` refuses while a seeded manifest is still empty — sub-agents would run with
+# zero spec context. Pass `start --allow-empty-context` when that is intentional.
 python ./.trellis/scripts/task.py add-context <name> <action> <file> <reason>
 python ./.trellis/scripts/task.py list-context <name> [action]
 python ./.trellis/scripts/task.py validate <name>
@@ -435,7 +437,7 @@ Brainstorm and research can interleave freely — pause to research a technical 
 
 [Claude Code, codex-sub-agent]
 
-Curate `implement.jsonl` and `check.jsonl` so the Phase 2 sub-agents get the right spec/research context. These files were seeded on `task create` with a single self-describing `_example` line; your job here is to fill in real entries.
+Curate `implement.jsonl` and `check.jsonl` so the Phase 2 sub-agents get the right spec/research context. These files were created empty on `task create`; your job here is to fill in real entries.
 
 **Location**: `{TASK_DIR}/implement.jsonl` and `{TASK_DIR}/check.jsonl` (already exist).
 
@@ -472,9 +474,9 @@ python ./.trellis/scripts/task.py add-context "$TASK_DIR" implement "<path>" "<r
 python ./.trellis/scripts/task.py add-context "$TASK_DIR" check "<path>" "<reason>"
 ```
 
-Delete the seed `_example` line once real entries exist (optional — it's skipped automatically by consumers).
+A legacy `{"_example": ...}` placeholder row from an older `task.py create` is rejected by `validate` — delete it.
 
-Ready gate: both `implement.jsonl` and `check.jsonl` must contain at least one real `{"file": "...", "reason": "..."}` entry before `task.py start`. The seed `_example` row alone is not ready.
+Ready gate: both `implement.jsonl` and `check.jsonl` must contain at least one real `{"file": "...", "reason": "..."}` entry before `task.py start`. `validate` fails and `start` refuses while a manifest is still empty; pass `start --allow-empty-context` only when the emptiness is deliberate.
 
 Skip this step only when both files already have real curated entries.
 

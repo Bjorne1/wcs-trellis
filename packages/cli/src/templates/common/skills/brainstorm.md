@@ -29,10 +29,10 @@ Use this skill only when the user has explicitly asked for a Trellis task. Never
 If the user asked for a task and none exists yet, create one:
 
 ```bash
-TASK_DIR=$({{PYTHON_CMD}} ./.trellis/scripts/task.py create "<short task title>" --slug <slug> --meta kind=<bug|feature|chore>)
+TASK_DIR=$({{PYTHON_CMD}} ./.trellis/scripts/task.py create "<short task title>" --description "<one-line summary>" --slug <slug> --meta kind=<bug|feature|chore>)
 ```
 
-Use a concise title from the user's request. Use a slug without a date prefix. `task.py create` adds the `MM-DD-` directory prefix automatically.
+Use a concise title from the user's request. Both the title and `--description` must be non-empty — `create` rejects blanks, and a record with either one empty is refused at archive. Use a slug without a date prefix. `task.py create` adds the `MM-DD-` directory prefix automatically.
 
 `meta.kind` selects the red-evidence gate this task must satisfy before `task.py start`: `bug` needs an already-executed reproduction, `feature` needs a user-confirmed test-seam list, `chore` is exempt. If the kind is not obvious from the request, it belongs on the first question frontier — never guess it and never default it. Set it later with `{{PYTHON_CMD}} ./.trellis/scripts/task.py set-meta <task-dir> kind <kind>`.
 
@@ -208,7 +208,7 @@ The final planning summary must show Goal, In Scope, Out of Scope, Acceptance Cr
 
 Every task must have `prd.md`, `design.md`, and `implement.md` before `task.py start`.
 
-`implement.md` is not a replacement for `implement.jsonl`. On sub-agent-dispatch workflows, `implement.jsonl` and `check.jsonl` must each contain at least one real spec/research entry before `task.py start`; the seed `_example` row does not count. Inline workflows skip this JSONL gate because Phase 2 loads context through `trellis-before-dev`.
+`implement.md` is not a replacement for `implement.jsonl`. On sub-agent-dispatch workflows, `implement.jsonl` and `check.jsonl` must each contain at least one real spec/research entry before `task.py start`; an empty manifest, or one holding only a legacy `_example` placeholder row, does not count. Inline workflows skip this JSONL gate because Phase 2 loads context through `trellis-before-dev`.
 
 ## PRD Convergence Pass
 
