@@ -148,7 +148,11 @@ function main() {
   // Push HEAD to the branch we are actually on, by name. `HEAD` alone relies
   // on the remote having a same-named branch, and a bare `main` pushes the
   // local main ref regardless of where the release commit lives.
-  run(`git push origin "HEAD:${branch}" --tags`);
+  //
+  // Push this release's tag by full ref, never `--tags`: upstream release tags
+  // live under refs/tags/upstream/* in this fork (docs/upstream/README.md), and
+  // `--tags` would push all of them to origin as well.
+  run(`git push origin "HEAD:${branch}" "refs/tags/v${version}"`);
   assertPushLanded(branch, `v${version}`);
 }
 

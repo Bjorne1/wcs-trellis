@@ -1,0 +1,61 @@
+# 上游同步策略——机器可读的排除规则。
+#
+# 这里只写"长期成立的主题规则"，不写逐提交决定。逐提交的决定是 O(提交数) 的，
+# 会无限膨胀，而且上游下次再动同一个功能还得重记一遍；主题规则是 O(主题数) 的，
+# 能自动分类未来的提交。
+#
+# 规则命中 ≠ 静默丢弃：tools/upstream-triage.py 会把命中的提交也列出来，
+# 并且当一个提交的改动文件里存在落在规则路径之外的文件时，把它降级为
+# review（mixed），防止上游在平台提交里顺手改了通用代码而被漏掉。
+version: 1
+
+# divergence.yml 里的路径与哪个上游点比对（一致性检查用）。
+# 每轮同步收尾后更新为本轮对齐到的上游 tag。
+divergence_baseline: refs/tags/upstream/v0.6.16
+
+# fork 保留的平台。这两个之外的平台目录一律不跟随上游。
+kept_platforms: [claude, codex]
+
+rules:
+  - id: non-claude-platforms
+    reason: >
+      本 fork 只分发 Claude Code + Codex，其余平台在 781e48fa / 3b95ba5e 已整体裁掉。
+      上游对这些平台的任何后续改动都不适用。
+    scopes:
+      [antigravity, codebuddy, copilot, cursor, devin, droid, dsh, gemini, grok,
+       kilo, kimi, kiro, omp, opencode, pi, qoder, reasonix, snow, trae, zcode]
+    # {p} 会被上面 scopes 里的每个平台名替换
+    path_templates:
+      - "packages/cli/src/templates/{p}/"
+      - "packages/cli/src/configurators/{p}.ts"
+      - "packages/cli/test/configurators/{p}.test.ts"
+      - "packages/cli/test/templates/{p}.test.ts"
+      - ".{p}/"
+
+  - id: upstream-release-commits
+    reason: >
+      fork 走独立版本线（0.7.1 起自行发版），上游的版本号提交、迁移清单和
+      changelog 都不适用；fork 的 manifest 链由自己维护（73d1075d / ed58d6b1）。
+    scopes: [release]
+    subject_patterns:
+      - '^\d+\.\d+\.\d+' # 纯版本号提交，如 "0.6.16"
+      - '^chore\(release\)'
+      - '^chore\(beta\)'
+    path_prefixes:
+      - packages/cli/src/migrations/
+      - docs-site
+    # 纯版本号提交只动这两个 package.json，列进来它们才会整条归入 skip
+    path_exact:
+      - packages/cli/package.json
+      - packages/core/package.json
+
+  - id: marketplace-submodule
+    reason: marketplace submodule 已在 9ebcf330 移除，上游的指针 bump 无处落地。
+    path_exact:
+      - marketplace
+      - .gitmodules
+
+  - id: community-assets
+    reason: 微信群二维码、README 推广位、star history 之类的社区物料与 fork 无关。
+    path_prefixes:
+      - assets/

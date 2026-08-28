@@ -1,0 +1,166 @@
+# 分歧台账——fork 主动改造过、且上游仍在维护的地方。
+#
+# 用途：算交集。上游本轮改动的文件 ∩ 这里的路径 = 必须人工评审的高风险区，
+# 其余可机械 cherry-pick。它同时防另一件事：机械 pick 上游对同一处的改动，
+# 会无声回退这些改造。
+#
+# 每条只记"改造主题 + 路径 + 出处提交 + 上游动这里时怎么办"，不逐行记 diff。
+# tools/upstream-triage.py --check 会校验每条的路径确实与 policy.yml 的
+# divergence_baseline 不同；不同点消失说明改造已被覆盖或已被上游吸收，
+# 该条目要么升级为告警，要么退役。
+version: 1
+
+entries:
+  - id: platform-trim
+    what: 只保留 Claude Code + Codex，其余 20 个平台的模板、configurator、产物目录整体删除。
+    commits: [781e48fa, 3b95ba5e, 19e01994]
+    path_prefixes:
+      - packages/cli/src/configurators/
+      - packages/cli/src/templates/
+      - packages/cli/src/types/
+      - packages/core/src/mem/
+      - packages/core/test/mem/
+    on_upstream_change: >
+      上游新增平台一律不跟（policy.yml 的 non-claude-platforms 会自动归入 skip）。
+      但上游改 configurators/index.ts、shared.ts 或 templates/common 时必须人工看，
+      那些文件在 fork 里被裁剪过，直接 pick 会把删掉的平台重新引回来。
+
+  - id: package-identity
+    what: 包名改为 @blulotus/trellis(-core)，版本线自 0.7.0 起独立于上游。
+    commits: [507ebf0c]
+    path_exact:
+      - package.json
+      - packages/cli/package.json
+      - packages/core/package.json
+      - pnpm-lock.yaml
+      - README.md
+      - README_CN.md
+      - CONTRIBUTING.md
+      - CONTRIBUTING_CN.md
+    path_prefixes:
+      - .github/workflows/
+      - packages/cli/src/commands/
+      - packages/cli/src/cli/
+      - packages/core/src/index.ts
+    on_upstream_change: >
+      上游任何提及 @mindfoldhq/ 包名、版本号或 npm 发布流程的改动都要改写包名后再落地。
+      不要 pick 上游的版本号提交（policy.yml 的 upstream-release-commits）。
+
+  - id: workflow-explicit-task
+    what: >
+      workflow 改为用户显式建 task，加 frontier 批量提问与红证据门禁，
+      spec 更新从强制降为按需。这是 fork 与上游行为差异最大的一处。
+    commits: [bfdc5170, 19e01994, 416c81b7, 0df4b84b]
+    path_exact:
+      - .trellis/workflow.md
+      - packages/cli/src/templates/trellis/workflow.md
+    path_prefixes:
+      - packages/cli/src/templates/claude/
+      - packages/cli/src/templates/codex/
+      - .claude/skills/
+      - .claude/agents/
+      - .agents/skills/
+      - .trellis/agents/
+      - .codex/
+    on_upstream_change: >
+      上游改 workflow.md 或任何 skill 文本时必须逐段人工合并——两边的阶段划分与门禁
+      语义已经不同，整文件 pick 会把红证据门禁和显式建任务一起删掉。
+
+  - id: spec-injection-switches
+    what: visual_design 改为运行时开关；spec 按路径按需注入而非全量分发。
+    commits: [4f231a6e, 0df4b84b]
+    path_exact:
+      - .trellis/config.yaml
+      - packages/cli/src/templates/trellis/config.yaml
+      - .claude/settings.json
+    path_prefixes:
+      - packages/cli/src/templates/shared-hooks/
+      - .claude/hooks/
+      - .codex/hooks/
+    on_upstream_change: >
+      config.yaml 的键集合两边已不同，pick 前先比对键；hooks 里的注入逻辑
+      fork 侧有额外分支，只取上游的 bug 修复部分。
+
+  - id: task-deprecate-and-ablate
+    what: 新增 task deprecate 子命令与废弃任务入口；deprecate 先过分支门禁再写入，ablate 的提交点 rename 加有界重试。
+    commits: [edf699cd, fc48dbcb]
+    path_exact:
+      - .trellis/scripts/task.py
+      - packages/cli/src/templates/trellis/scripts/task.py
+    path_prefixes:
+      - .trellis/scripts/common/
+      - packages/cli/src/templates/trellis/scripts/common/
+      - packages/cli/src/utils/
+    on_upstream_change: >
+      上游对 task.py / task_store.py 的改动大概率冲突（fork 多了一个子命令和门禁顺序）。
+      先 pick 到临时分支跑 packages/cli/test/regression.test.ts 再决定。
+
+  - id: session-identity-pending-claim
+    what: engage 在无开发者身份时改记 pending claim，由 hook 完成会话绑定。
+    commits: [ef4338af, 0ce8097e]
+    path_prefixes:
+      - .trellis/scripts/
+      - packages/cli/src/templates/trellis/scripts/
+      - .claude/commands/trellis/
+    on_upstream_change: 上游改 session/identity 相关脚本时，保留 pending claim 这条路径。
+
+  - id: update-platform-detection
+    what: trellis update 的平台探测不再只依赖模板哈希清单（裁剪过的 fork 里哈希对不上）。
+    commits: [ce6d8aa5]
+    path_prefixes:
+      - packages/cli/src/configurators/
+      - packages/cli/src/migrations/
+    on_upstream_change: >
+      上游改 update/探测逻辑时必须验证在裁剪过的平台集合下仍成立，
+      跑 packages/cli/test/configurators/。
+
+  - id: release-manifest-chain
+    what: fork 自己的迁移清单链与发布流程（manifest 连续性、npm view 超时、tag 精确推送）。
+    commits: [73d1075d, ed58d6b1, 9ebcf330]
+    path_prefixes:
+      - packages/cli/src/migrations/
+      - packages/cli/scripts/
+    path_exact:
+      - .husky/pre-commit
+    on_upstream_change: >
+      manifest 目录两边的版本号完全不同，永远不要整目录 pick。
+      release.js 里 tag 推送用的是 refs/tags/v<version> 而非 --tags，
+      因为上游 tag 在本仓库位于 refs/tags/upstream/*（见 README.md）。
+
+  - id: session-auto-commit-default
+    what: 不再托管项目根 .gitattributes；session_auto_commit 默认关闭。
+    commits: [8c04c236]
+    path_exact:
+      - .gitattributes
+      - .gitignore
+    on_upstream_change: 上游若重新引入 .gitattributes 托管，跳过。
+
+  - id: dual-env-sync-tools
+    what: Windows/WSL 双环境一键构建、测试、发布、安装脚本（fork 独有，上游没有对应文件）。
+    commits: [84fa17af, b7c5b457]
+    path_prefixes:
+      - tools/
+    on_upstream_change: 无冲突风险；但脚本里的哈希校验假设了 fork 的模板内容，模板变了要同步。
+
+  - id: windows-test-compat
+    what: 测试套件的 Windows 兼容修复与陈旧用例清理。
+    commits: [dddba44c, a5ba319b]
+    path_prefixes:
+      - packages/cli/test/
+    on_upstream_change: 上游新增测试若假设 POSIX 路径或已删平台，落地后需按此改造调整。
+
+  - id: dogfood-runtime-copy
+    what: >
+      本仓库自身是 dogfood 检出，.trellis/ 下是模板的运行副本，版本与哈希清单
+      随发布手工同步（trellis update 会按模板哈希改写这里的文件）。
+    commits: [dc88e327, 8f86c55f]
+    path_exact:
+      - .trellis/.version
+      - .trellis/.template-hashes.json
+    path_prefixes:
+      - .trellis/spec/
+      - .trellis/tasks/
+    on_upstream_change: >
+      上游改 .trellis/ 下的 spec 时，注意 fork 的 spec 已按裁剪后的平台集合重写过。
+      模板侧（packages/cli/src/templates/trellis/）与 dogfood 侧要一起改，
+      否则 regression.test.ts 的字节一致性断言会红。
