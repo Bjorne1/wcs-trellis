@@ -282,7 +282,7 @@ Classify each hit:
 
 | Kind | Example | Action |
 |------|---------|--------|
-| **Schema / creator** | `task_store.cmd_create`, `@mindfoldhq/trellis-core/task:emptyTaskRecord` (re-exported by `utils/task-json.ts:emptyTaskJson` for legacy CLI call sites) | Drop field from output |
+| **Schema / creator** | `task_store.cmd_create`, `@blulotus/trellis-core/task:emptyTaskRecord` (re-exported by `utils/task-json.ts:emptyTaskJson` for legacy CLI call sites) | Drop field from output |
 | **Writer / updater** | `inject-subagent-context.py:update_current_phase` | **Drop the write call OR delete the function entirely** |
 | **Reader / getter** | `tasks.py:load_task` (defaults via `data.get("field", default)` on `TaskInfo`) | Keep with tolerance default (`data.get("field", null)`) — handles legacy files |
 | **Docs / comments** | spec, README, PRDs | Update references |
@@ -351,7 +351,7 @@ The task `04-21-task-schema-unify` ran a retroactive audit on the 0.5.0-beta.0 d
 3. **Type declarations count as writers of the reader-side contract**: a TypedDict / TS interface that still declares the deprecated field misleads consumers the same way a runtime writer does. Prune declarations in the same PR as runtime writers.
 
 **Consolidation outcome**: the canonical TypeScript task shape now lives in
-`@mindfoldhq/trellis-core/task` as `TrellisTaskRecord` +
+`@blulotus/trellis-core/task` as `TrellisTaskRecord` +
 `emptyTaskRecord(overrides)`. `packages/cli/src/utils/task-json.ts` only
 re-exports those under the legacy `TaskJson` / `emptyTaskJson` names for CLI
 call sites. Both `init.ts` and `update.ts` route through that shared factory.

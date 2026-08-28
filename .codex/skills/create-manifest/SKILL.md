@@ -15,8 +15,8 @@ Create a migration manifest for a new patch, beta, rc, or minor release based on
 
 Trellis currently publishes two npm packages from the same git tag:
 
-- `@mindfoldhq/trellis`
-- `@mindfoldhq/trellis-core`
+- `@blulotus/trellis`
+- `@blulotus/trellis-core`
 
 Both packages must always share the exact same version and npm dist-tag. Source uses `workspace:*`; the packed CLI must depend on the exact published core version.
 
@@ -204,7 +204,7 @@ Verify:
 1. `packages/cli/src/migrations/manifests/<version>.json` exists and has valid JSON.
 2. Manifest `changelog` renders as real newlines.
 3. Both docs-site changelog MDX files exist and match 1:1.
-4. `@mindfoldhq/trellis` and `@mindfoldhq/trellis-core` versions still match.
+4. `@blulotus/trellis` and `@blulotus/trellis-core` versions still match.
 
 ## Step 11: Publish Through CI
 
@@ -220,8 +220,8 @@ pnpm release:promote
 After CI succeeds, verify public npm:
 
 ```bash
-npm view @mindfoldhq/trellis@<version> version dist-tags --json --registry=https://registry.npmjs.org/
-npm view @mindfoldhq/trellis-core@<version> version dist-tags --json --registry=https://registry.npmjs.org/
+npm view @blulotus/trellis@<version> version dist-tags --json --registry=https://registry.npmjs.org/
+npm view @blulotus/trellis-core@<version> version dist-tags --json --registry=https://registry.npmjs.org/
 ```
 
 If CI fails or npm visibility is wrong, fix the workflow/scripts and re-run the CI path. Do not use local publish to fill the gap.
@@ -232,7 +232,7 @@ Breaking releases must run end-to-end migration in a throwaway directory:
 
 ```bash
 mkdir /tmp/migrate-test && cd /tmp/migrate-test && git init -q .
-npx -y @mindfoldhq/trellis@<last-ga> init -y -u test --claude --cursor --<platforms>
+npx -y @blulotus/trellis@<last-ga> init -y -u test --claude --codex
 node <repo>/packages/cli/dist/cli/index.js update --migrate --dry-run
 yes | node <repo>/packages/cli/dist/cli/index.js update --migrate --force
 yes | node <repo>/packages/cli/dist/cli/index.js update

@@ -1,6 +1,6 @@
 ---
 name: trellis-core-sdk
-description: "@mindfoldhq/trellis-core / CLI package boundary, public exports, build and versioning contracts"
+description: "@blulotus/trellis-core / CLI package boundary, public exports, build and versioning contracts"
 paths:
   - packages/core/**
   - packages/cli/src/**
@@ -16,7 +16,7 @@ paths:
 
 # Trellis Core SDK
 
-> Package boundary and coding rules for `@mindfoldhq/trellis-core` and the CLI.
+> Package boundary and coding rules for `@blulotus/trellis-core` and the CLI.
 
 ---
 
@@ -26,8 +26,8 @@ Trellis is split into two version-locked packages:
 
 | Package                    | Responsibility                                                                                                                           |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `@mindfoldhq/trellis-core` | Reusable domain logic, storage primitives, reducers, task APIs, channel APIs, and typed contracts.                                       |
-| `@mindfoldhq/trellis`      | CLI argument parsing, terminal rendering, command wiring, process exit behavior, template installation, migrations, and release scripts. |
+| `@blulotus/trellis-core` | Reusable domain logic, storage primitives, reducers, task APIs, channel APIs, and typed contracts.                                       |
+| `@blulotus/trellis`      | CLI argument parsing, terminal rendering, command wiring, process exit behavior, template installation, migrations, and release scripts. |
 
 The CLI should be a thin shell around core where a capability needs to be shared with other integrations. The core package must stay independent of terminal UX and CLI process control.
 
@@ -61,7 +61,7 @@ When logic starts in the CLI but is needed by another package or embedding app, 
 CLI code must import core through public exports:
 
 ```ts
-import { createChannelStore } from "@mindfoldhq/trellis-core/channel";
+import { createChannelStore } from "@blulotus/trellis-core/channel";
 ```
 
 Do not deep-import core internals:
@@ -78,11 +78,11 @@ Core public exports must be declared explicitly in `packages/core/package.json`.
 Core exposes domains as explicit subpaths, not from one root barrel:
 
 ```ts
-import { createChannelStore } from "@mindfoldhq/trellis-core/channel";
-import { searchMemSessions } from "@mindfoldhq/trellis-core/mem";
+import { createChannelStore } from "@blulotus/trellis-core/channel";
+import { searchMemSessions } from "@blulotus/trellis-core/mem";
 ```
 
-`mem` is published as the `@mindfoldhq/trellis-core/mem` subpath only. It is intentionally **not** re-exported from the `@mindfoldhq/trellis-core` root barrel — that keeps the root API small and stops `DialogueTurn` / `SearchHit` / `MemFilter` from leaking into the root surface. The `mem` public API is `listMemSessions`, `searchMemSessions`, `readMemContext`, `extractMemDialogue`, `listMemProjects`, plus their input/output types and `MemSessionNotFoundError`. Anything under `packages/core/src/mem/internal/` (JSONL/path helpers) is private and must not be deep-imported by the CLI.
+`mem` is published as the `@blulotus/trellis-core/mem` subpath only. It is intentionally **not** re-exported from the `@blulotus/trellis-core` root barrel — that keeps the root API small and stops `DialogueTurn` / `SearchHit` / `MemFilter` from leaking into the root surface. The `mem` public API is `listMemSessions`, `searchMemSessions`, `readMemContext`, `extractMemDialogue`, `listMemProjects`, plus their input/output types and `MemSessionNotFoundError`. Anything under `packages/core/src/mem/internal/` (JSONL/path helpers) is private and must not be deep-imported by the CLI.
 
 The `mem` domain follows the same core API rules as the rest of core: no `zod`, no `console.*`, no `process.exit`. Structured search/context/extract results carry a `warnings` array; list/projects preserve their historical array return types and expose warnings through an optional `onWarning` callback. The CLI decides how to surface warnings and what exit code to use.
 
@@ -163,8 +163,8 @@ Fresh checkouts do not have `packages/core/dist`. The root `typecheck` script mu
 Required order:
 
 ```bash
-pnpm --filter @mindfoldhq/trellis-core build
-pnpm --filter @mindfoldhq/trellis typecheck
+pnpm --filter @blulotus/trellis-core build
+pnpm --filter @blulotus/trellis typecheck
 ```
 
 The release and CI flows must keep this order. A CLI typecheck that only works after a developer has previously built core locally is invalid.

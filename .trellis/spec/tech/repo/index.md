@@ -13,8 +13,8 @@ load the right guidance.
 
 | Package key | Path | Package name | Spec path | Purpose |
 | --- | --- | --- | --- | --- |
-| `cli` | `packages/cli` | `@mindfoldhq/trellis` | `.trellis/spec/cli/**` | User-facing CLI, templates, migrations, release scripts, and platform configurators. |
-| `core` | `packages/core` | `@mindfoldhq/trellis-core` | `.trellis/spec/core/**` | Reusable SDK/domain primitives for channel, mem, task, and testing APIs. |
+| `cli` | `packages/cli` | `@blulotus/trellis` | `.trellis/spec/cli/**` | User-facing CLI, templates, migrations, release scripts, and platform configurators. |
+| `core` | `packages/core` | `@blulotus/trellis-core` | `.trellis/spec/core/**` | Reusable SDK/domain primitives for channel, mem, task, and testing APIs. |
 
 ## Workspace And Submodules
 

@@ -6,7 +6,7 @@
 
 ## Overview
 
-This project is a **TypeScript monorepo** using ES modules. It publishes a CLI package (`@mindfoldhq/trellis`) and a reusable core package (`@mindfoldhq/trellis-core`). The source code also follows a **dogfooding architecture** - Trellis uses its own configuration files (`.claude/`, `.codex/`, `.trellis/`) as templates for new projects.
+This project is a **TypeScript monorepo** using ES modules. It publishes a CLI package (`@blulotus/trellis`) and a reusable core package (`@blulotus/trellis-core`). The source code also follows a **dogfooding architecture** - Trellis uses its own configuration files (`.claude/`, `.codex/`, `.trellis/`) as templates for new projects.
 
 ---
 
@@ -14,14 +14,14 @@ This project is a **TypeScript monorepo** using ES modules. It publishes a CLI p
 
 ```
 packages/
-├── core/                # @mindfoldhq/trellis-core: reusable APIs
+├── core/                # @blulotus/trellis-core: reusable APIs
 │   ├── src/
 │   │   ├── channel/     # channel/thread storage, reducers, event protocol helpers
 │   │   ├── task/        # reusable task record helpers
 │   │   ├── testing/     # test helpers intended for package consumers
 │   │   └── index.ts     # package public API
 │   └── package.json     # explicit public exports
-└── cli/                 # @mindfoldhq/trellis: user-facing CLI
+└── cli/                 # @blulotus/trellis: user-facing CLI
     ├── src/
     │   ├── cli/         # CLI entry point and argument parsing
     │   │   └── index.ts # Main CLI entry (Commander.js setup)

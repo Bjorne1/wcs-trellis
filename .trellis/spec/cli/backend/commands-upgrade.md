@@ -24,7 +24,7 @@ trellis upgrade [--tag <tag-or-version>] [--dry-run]
 
 Behavior:
 
-- Builds and runs `npm install -g @mindfoldhq/trellis@<tag>`.
+- Builds and runs `npm install -g @blulotus/trellis@<tag>`.
 - POSIX execution must spawn `npm` directly without shell execution.
 - Windows execution must route through `cmd.exe /d /s /c npm install -g ...`
   instead of directly spawning `npm.cmd`.
@@ -79,7 +79,7 @@ the user's shell still resolves an older `trellis` binary earlier on PATH.
 Any user-facing hint that previously said:
 
 ```text
-npm install -g @mindfoldhq/trellis@latest
+npm install -g @blulotus/trellis@latest
 ```
 
 should now prefer:

@@ -11,8 +11,9 @@
 #     而 WSL 直接在 /mnt/d 上跑 vitest 会因为 /mnt/d 根目录无法列目录
 #     （DrvFs I/O error）让 esbuild 加载 vitest.config.ts 时崩掉。
 #     所以镜像到 ext4 才有可信的测试结论。
-#   - 校验用 sha256 比对，不用关键字匹配：定制版与上游版本号相同
-#     （都是 0.7.0-beta.3），版本号分辨不出来，文件哈希可以。
+#   - 校验用 sha256 比对，不用版本号匹配：npm 上的 @blulotus/trellis 可能比这次
+#     构建旧，全局装的也可能是上一次的产物，版本号相同不代表内容相同。
+#     只有文件哈希能确认装上去的就是刚构建的这份。
 #
 # 用法：
 #   tools/sync-trellis.sh                 构建 → 测试 → 打包 → 装两边 → 校验
@@ -263,6 +264,7 @@ if [ "$INSTALL_WSL" = 1 ]; then
 fi
 if [ "$INSTALL_WIN" = 1 ] || [ "$INSTALL_WSL" = 1 ]; then
   echo
-  echo "两边版本号都是 $PKG_VERSION，和上游一样——分辨定制版只能靠上面的哈希校验。"
-  echo "永远不要跑 trellis upgrade，它会把你换回上游。"
+  echo "两边都是 $PKG_NAME@$PKG_VERSION；内容与本次构建一致由上面的哈希校验确认。"
+  echo "trellis update 查的是 $PKG_NAME 自己的 npm 包（不再是上游），"
+  echo "所以它不会把你换回上游，但会把本地构建换成 npm 上已发布的版本。"
 fi
