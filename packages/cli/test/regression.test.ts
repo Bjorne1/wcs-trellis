@@ -1674,7 +1674,7 @@ describe("regression: current-task path normalization", () => {
    * the platform gives it no session identity — `task.py engage` / `task.py
    * start` on Codex, where nothing in the exec environment carries a session id.
    */
-  function readPendingClaims(): Array<Record<string, unknown>> {
+  function readPendingClaims(): Record<string, unknown>[] {
     const pendingDir = path.join(tmpDir, ".trellis", ".runtime", "pending");
     if (!fs.existsSync(pendingDir)) return [];
     return fs
