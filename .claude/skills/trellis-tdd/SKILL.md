@@ -1,17 +1,17 @@
 ---
 name: trellis-tdd
-description: "Red-before-green contract for behavior work: build a red-capable command that asserts the exact symptom or desired behavior, watch it fail, then write the minimum code to pass, one slice at a time. Covers bug reproduction and minimisation, test-seam confirmation, and the explicit no-harness fallback. Use when reproducing a reported bug, writing a failing test, or implementing a slice of a feature that changes behavior."
+description: "Use when reproducing a bug or implementing a behavior change with a failing test before the fix."
 ---
 
 # Red Before Green
 
 No production code before red evidence.
 
-Red evidence is one command you have **already executed** that goes red on the exact thing you are about to change. For a bug that is the reproduction; for a feature it is a failing test at a confirmed seam. Both are the same primitive, and both exist so that "it works now" is a claim you can check instead of a claim you make.
+Red evidence is one command you have **already executed** that goes red on the exact thing you are about to change. For a bug that is the reproduction; for a feature it is a failing test at a documented seam. Both are the same primitive, and both exist so that "it works now" is a claim you can check instead of a claim you make.
 
 A lint pass, a successful build, or a green type-check is not red evidence. None of them can observe the behavior in question.
 
-**Authorization**: building the loop, reproducing, minimising, and hypothesising are report-only. Writing production code needs the current turn to ask for a fix — a request to reproduce or diagnose is not one. The red evidence is required either way.
+**Authorization**: a request to reproduce or diagnose permits investigation, not an unrequested production fix. An explicit fix or implementation request authorizes in-scope code changes and ordinary test choices across the session; do not require the user to repeat it each turn. An explicit "discuss first" or planning-only instruction remains in force until the user authorizes implementation. The red evidence is required either way.
 
 **Done when**: the red command has been run and its redacted output recorded in the artifact named under Recording the Evidence; and, for a fix, that same command has been re-run against the original scenario and observed green.
 
@@ -24,7 +24,7 @@ Read `meta.kind` from the active task's `task.json`.
 | `meta.kind` | Path | Gate |
 |---|---|---|
 | `bug` | Reproduce first — see **Bug Path** | Repro recorded in `research/repro-<topic>.md` before `task.py start` |
-| `feature` | Confirm seams, then slice — see **Feature Path** | Seam list in `design.md` before `task.py start`; red before green per slice |
+| `feature` | Document seams, then slice — see **Feature Path** | Seam list in `design.md` before `task.py start`; red before green per slice |
 | `chore` | Exempt | — |
 
 If `meta.kind` is missing, ask the user and set it with `task.py set-meta <task-dir> kind <kind>`. Never guess it. `chore` covers config, docs, scaffolding, and mechanical moves — do not label a behavior change `chore` to escape the gate.
@@ -104,17 +104,17 @@ Then: watch the test fail, apply the fix, watch it pass, and re-run the step-1 l
 
 ## Feature Path
 
-### 1. Confirm the seams first
+### 1. Choose and document the seams
 
-No test is written at an unconfirmed seam. The seam is the public boundary the test sits on, and choosing it is a design decision that belongs to the user — ask *what is the public interface, and which seams should we test?* during planning, and record the answer in `design.md`.
+A seam is the public boundary exercised by a test. Choose ordinary seams from the accepted behavior, existing interfaces, and test harness, and record the list and rationale in `design.md`. This is an implementation decision within the user's authorized scope, not a separate approval for every test.
 
-Implementation may not invent a seam. If the right seam is missing from `design.md`, that is a planning defect: go back to requirement exploration rather than improvising one.
+Ask the user only when choosing a seam would change the public contract, acceptance behavior, compatibility, scope, or material cost. If implementation reveals another seam within the same authorized contract, update `design.md` with its rationale and continue. Return to planning when the contract changes or a user-owned decision remains unresolved.
 
 ### 2. One slice per cycle
 
 A slice is one seam, one test, one minimal implementation. Per slice:
 
-1. Write the test at the confirmed seam.
+1. Write the test at the documented seam.
 2. Run it. Watch it fail for the reason you expect — a test that fails because of a typo or a missing import is not red evidence.
 3. Paste the redacted red output into that slice's entry in `implement.md`.
 4. Write the minimum production code to make it pass. Run it again.
@@ -144,7 +144,7 @@ Nothing here lives only in the chat.
 | Evidence | Goes in |
 |---|---|
 | Bug reproduction: command, red output, minimised scenario | `research/repro-<topic>.md` |
-| Confirmed test seams | `design.md` |
+| Test seams and rationale | `design.md` |
 | Per-slice red output and completion | the slice entry in `implement.md` |
 | "No red-capable command", with what was tried and what is needed | `research/repro-<topic>.md`, or the slice entry |
 

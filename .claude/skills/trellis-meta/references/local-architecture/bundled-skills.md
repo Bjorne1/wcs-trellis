@@ -16,12 +16,14 @@ A bundled skill is a directory under `packages/cli/src/templates/common/bundled-
 
 The Trellis CLI never touches anything that is not produced by one of its own template loaders. Anything a user drops into a platform skill root by hand is left alone.
 
-## Current Bundled Skills (v0.6.0)
+## Current Bundled Skills
 
 The set is discovered at runtime by listing directories under `templates/common/bundled-skills/`:
 
 | Skill | Purpose |
 | --- | --- |
+| `trellis-brainstorm` | Task planning, with artifact guidance and decision aids loaded from references as needed. |
+| `trellis-update-spec` | Capture executable contracts and reusable lessons, with conditional spec templates. |
 | `trellis-meta` | This skill. Explains the local Trellis architecture and customization entry points to an AI working inside a user project. |
 | `trellis-session-insight` | Wraps the `trellis mem` CLI so an AI knows when and how to reach into past Claude Code / Codex conversation logs. |
 | `trellis-spec-bootstrap` | Platform-neutral workflow for creating or refreshing `.trellis/spec/` from the real codebase (with optional GitNexus / ABCoder integration). |

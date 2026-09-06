@@ -38,10 +38,10 @@ python ./.trellis/scripts/task.py create "<task title>" --slug <name> --meta kin
 ```
 
 - `--slug` is the human-readable name only; the `MM-DD-` prefix is added for you.
-- `--meta kind=` selects the red-evidence gate: `bug` needs an executed repro with red output, `feature` needs a user-confirmed test-seam list, `chore` is exempt. **Never guess the kind** — if the request does not make it unambiguous, ask the user before running the command.
+- `--meta kind=` selects the red-evidence gate: `bug` needs an executed repro with red output, `feature` needs a documented test-seam list, `chore` is exempt. **Never guess the kind** — if the request does not make it unambiguous, ask the user before running the command.
 - Run only `create`. Do not run `task.py start`; that flips status to `in_progress` and skips the planning gate. `start` belongs to Phase 1.4, after the artifacts are reviewed.
 
-Creating the task is not approval to implement.
+Creating the task alone is not approval to implement. A clear implementation request in the session authorizes the settled scope after planning and evidence checks; an explicit planning-only instruction still needs approval to proceed.
 
 ## Step 4: Plan it
 

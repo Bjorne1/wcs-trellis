@@ -417,6 +417,32 @@ describe("configurePlatform", () => {
   });
 
 
+  it.each([
+    { id: "codex" as const, skillsRoot: ".agents/skills" },
+    { id: "claude-code" as const, skillsRoot: ".claude/skills" },
+  ])("$id installs loadable planning and spec references", async ({ id, skillsRoot }) => {
+    await configurePlatform(id, tmpDir);
+    const templates = collectPlatformTemplates(id);
+    if (!templates) {
+      throw new Error(`${id} did not expose template tracking`);
+    }
+
+    for (const name of ["trellis-brainstorm", "trellis-update-spec"]) {
+      const skillRoot = `${skillsRoot}/${name}`;
+      const entrypoint = readConfiguredFile(tmpDir, `${skillRoot}/SKILL.md`);
+      const references = [...entrypoint.matchAll(/\]\((references\/[^)#\s]+)(?:#[^)]*)?\)/g)];
+      expect(references.length, `${name} must link its conditional guidance`).toBeGreaterThan(0);
+
+      for (const [, reference] of references) {
+        const relativePath = `${skillRoot}/${reference}`;
+        const content = readConfiguredFile(tmpDir, relativePath);
+        expect(content.trim().length, relativePath).toBeGreaterThan(0);
+        expect(templates.get(relativePath), `${relativePath} must be tracked for update`).toBe(content);
+        expect(content, `${relativePath} has unresolved placeholders`).not.toMatch(/\{\{[A-Z_]+(?::[^}]+)?\}\}/);
+      }
+    }
+  });
+
   it("configurePlatform('codex') writes custom agents and config", async () => {
     await configurePlatform("codex", tmpDir);
 

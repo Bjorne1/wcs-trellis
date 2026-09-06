@@ -4,8 +4,9 @@ When the user wants to change AI entry points, auto-trigger rules, or explicit c
 
 Before editing, classify the skill you are about to touch:
 
-- **Bundled upstream skill** — `trellis-meta`, `trellis-spec-bootstrap`, `trellis-session-insight`, `trellis-channel`. Source of truth lives in the Trellis CLI repo under `packages/cli/src/templates/common/bundled-skills/<name>/`; auto-dispatched to every platform's skill root by `getBundledSkillTemplates()` on `trellis init` / `trellis update`. Local edits here are tracked by `.trellis/.template-hashes.json` and will be flagged on the next update.
-- **Project-local skill** — anything else under `.{platform}/skills/`. Owned by the user; not refreshed by `trellis update`.
+- **Bundled upstream skill** — a directory under `packages/cli/src/templates/common/bundled-skills/<name>/`, including `trellis-brainstorm`, `trellis-update-spec`, `trellis-meta`, `trellis-spec-bootstrap`, `trellis-session-insight`, and `trellis-channel`. Auto-dispatched by `getBundledSkillTemplates()` on `trellis init` / `trellis update`; local edits are tracked in `.trellis/.template-hashes.json`.
+- **Single-file generated skill** — produced from `common/skills/` or a command template. Also managed by Trellis; inspect its source and hash entry before editing.
+- **Project-local skill** — a user-owned skill outside those generated sets. Not refreshed by `trellis update`.
 
 The remainder of this file uses "skill" for the local file; the override and conflict rules differ between the two cases.
 
@@ -52,7 +53,7 @@ Do not write vague descriptions such as "helpful project skill"; they can trigge
 
 The same directory shape is used by two very different ownership models:
 
-| Aspect | Bundled (`trellis-meta`, `trellis-spec-bootstrap`, `trellis-session-insight`, `trellis-channel`) | Project-local |
+| Aspect | Bundled | Project-local |
 | --- | --- | --- |
 | Source of truth | `packages/cli/src/templates/common/bundled-skills/<name>/` in Trellis CLI repo | Inside the user project itself |
 | Dispatch | Auto-dispatched to every platform skill root by `getBundledSkillTemplates()` (`packages/cli/src/templates/common/index.ts`) on `trellis init` / `trellis update` | Created by the user (or another skill) and never moved |
@@ -98,7 +99,7 @@ If a command only repeats workflow rules, prefer making it reference/read `.trel
 | Claude Code | `.claude/skills/`, `.claude/commands/` |
 | Codex | `.agents/skills/`, `.codex/skills/` |
 
-Every directory above is a deploy target for the four bundled skills. Each platform receives a full copy on `trellis init` and refresh on `trellis update`; nothing has to be wired by hand.
+Every directory above is a deploy target for the bundled skills. Each platform receives a full copy on `trellis init` and refresh on `trellis update`; nothing has to be wired by hand.
 
 ## Add A Project-Local Skill
 
@@ -111,8 +112,10 @@ If the user wants to document team-private customizations, create a project-loca
 
 For multi-platform projects, add equivalent versions in each platform skill directory, or use the shared `.agents/skills/` layer that Codex reads.
 
-Pick a name that does **not** collide with the bundled set:
+Pick a name that does **not** collide with the generated skill set. The bundled set currently includes:
 
+- `trellis-brainstorm`
+- `trellis-update-spec`
 - `trellis-meta`
 - `trellis-spec-bootstrap`
 - `trellis-session-insight`

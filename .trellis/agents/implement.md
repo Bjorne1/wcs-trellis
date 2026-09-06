@@ -29,7 +29,7 @@ Before implementing, read in this order:
 
 ## Red Before Green
 
-Walk the `implement.md` slice checklist one slice at a time. Per slice: write the test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice's entry, then write the minimum code to make it pass.
+Walk the `implement.md` slice checklist one slice at a time. Per slice: write the test at a seam documented in `design.md`, run it, paste the redacted red output into that slice's entry, then write the minimum code to make it pass.
 
 - Do not invent a seam that is not in `design.md` — a missing seam is a planning defect. Report it instead of improvising one.
 - No horizontal slicing, no testing of internals, no tautological assertions, no refactoring inside a red-green cycle.

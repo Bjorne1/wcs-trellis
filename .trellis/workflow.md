@@ -164,15 +164,22 @@ Phase 3: Finish  → verify, commit, and wrap up
 - Trellis is opt-in per session. Until the user invokes `trellis-start`, `trellis-continue` or `trellis-finish-work`, no Trellis context is injected and there is nothing to route — work inline.
 - Do not ask whether to create a Trellis task, and do not offer, suggest, or infer that a request warrants one. The user owns that judgment and expresses it by invoking `trellis-start`.
 - An in-flight task from another session is not this session's task. Only `trellis-continue` adopts it.
-- Creating a task is not approval to start implementation. Planning still happens first, and every task gets the full artifact set.
+- Creating a task alone is not approval to start implementation. Planning still happens first, and every task gets the full artifact set; an explicit implementation request in the session can already authorize the settled scope.
 
 ### Planning Artifacts
 
 - `prd.md` — requirements, constraints, and acceptance criteria. Do not put technical design or execution checklists here.
-- `design.md` — technical design: boundaries, contracts, data flow, tradeoffs, compatibility, rollout / rollback shape. For `kind=feature` it also carries the confirmed test-seam list.
+- `design.md` — technical design: boundaries, contracts, data flow, tradeoffs, compatibility, rollout / rollback shape. For `kind=feature` it also carries the documented test-seam list.
 - `implement.md` — execution plan: ordered slice checklist, validation commands, review gates, and rollback points.
 - `implement.jsonl` / `check.jsonl` — spec and research manifests for sub-agent context. They do not replace `implement.md`.
 - Every task needs `prd.md`, `design.md`, and `implement.md` before `task.py start`. There is no PRD-only tier — a task the user explicitly asked for is by definition worth the full artifact set.
+
+### Implementation Authorization
+
+- Honor explicit implementation authorization across the session. A request to build, implement, fix, refactor, or proceed covers routine implementation and test choices within that scope.
+- If the user says "discuss first", "plan only", or "先讨论", complete planning and wait for explicit authorization to implement.
+- Review the artifacts and present the settled plan before start. Ask only when authorization is missing, the plan materially expands it, or a user-owned product, scope, UX, compatibility, risk, or acceptance decision remains unresolved. A separate reply is not required when the existing request already covers the plan.
+- Choose ordinary test seams from accepted behavior and existing public interfaces, and document the rationale. Ask about choices that change the public contract, acceptance behavior, scope, compatibility, or material cost.
 
 ### Task Kind and the Red-Evidence Gate
 
@@ -181,7 +188,7 @@ Every task records its kind in `task.json` under `meta.kind`, set at creation wi
 | `meta.kind` | Red evidence | Where it lives | Enforced at |
 |---|---|---|---|
 | `bug` | A red-capable command you have already executed: it drives the real code path, asserts the reported symptom, is deterministic (or has a workable flake rate), and is fast enough to re-run | `research/repro-<topic>.md` — the redacted invocation plus its red output | Phase 1.4, before `task.py start` |
-| `feature` | A confirmed test-seam list: the public boundaries the tests will sit on, agreed with the user | `design.md` | Phase 1.4 for the seam list; red-before-green per slice in Phase 2.1 |
+| `feature` | A documented test-seam list: public boundaries selected from accepted behavior and existing interfaces | `design.md` | Phase 1.4 for the seam list; red-before-green per slice in Phase 2.1 |
 | `chore` | Exempt | — | — |
 
 Rules:
@@ -219,9 +226,9 @@ No active task. Work inline; create a Trellis task only when the user explicitly
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
 
 [workflow-state:planning]
-Load `trellis-brainstorm`; stay in planning. Ask the whole current frontier per round, not one question per message.
-Finish `prd.md`, `design.md`, and `implement.md` — all three, every task; ask for review before `task.py start`.
-Red-evidence gate keyed on `task.json` `meta.kind`: `bug` needs an already-executed red-capable repro command plus its redacted red output in `research/`; `feature` needs a user-confirmed test-seam list in `design.md`; `chore` is exempt. If `meta.kind` is missing, ask the user to set it with `task.py set-meta <task-dir> kind <kind>` — never guess.
+Load `trellis-brainstorm`; complete planning and ask the current frontier of unresolved user-owned decisions in one round.
+Finish and review `prd.md`, `design.md`, and `implement.md` — all three, every task. Before `task.py start`, present the settled plan and check evidence and session authorization. Proceed within existing implementation authorization; a planning-only request or expanded scope needs approval.
+Red-evidence gate keyed on `task.json` `meta.kind`: `bug` needs an already-executed red-capable repro command plus its redacted red output in `research/`; `feature` needs a documented test-seam list in `design.md`; `chore` is exempt. If `meta.kind` is missing, ask the user to set it with `task.py set-meta <task-dir> kind <kind>` — never guess.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 [/workflow-state:planning]
@@ -233,9 +240,9 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
      into a sub-agent. -->
 
 [workflow-state:planning-inline]
-Load `trellis-brainstorm`; stay in planning. Ask the whole current frontier per round, not one question per message.
-Finish `prd.md`, `design.md`, and `implement.md` — all three, every task; ask for review before `task.py start`.
-Red-evidence gate keyed on `task.json` `meta.kind`: `bug` needs an already-executed red-capable repro command plus its redacted red output in `research/`; `feature` needs a user-confirmed test-seam list in `design.md`; `chore` is exempt. If `meta.kind` is missing, ask the user to set it with `task.py set-meta <task-dir> kind <kind>` — never guess.
+Load `trellis-brainstorm`; complete planning and ask the current frontier of unresolved user-owned decisions in one round.
+Finish and review `prd.md`, `design.md`, and `implement.md` — all three, every task. Before `task.py start`, present the settled plan and check evidence and session authorization. Proceed within existing implementation authorization; a planning-only request or expanded scope needs approval.
+Red-evidence gate keyed on `task.json` `meta.kind`: `bug` needs an already-executed red-capable repro command plus its redacted red output in `research/`; `feature` needs a documented test-seam list in `design.md`; `chore` is exempt. If `meta.kind` is missing, ask the user to set it with `task.py set-meta <task-dir> kind <kind>` — never guess.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-before-dev`.
 [/workflow-state:planning-inline]
@@ -256,7 +263,7 @@ Sub-agent dispatch protocol applies to all platforms and all sub-agents, includi
 [workflow-state:in_progress]
 Tools: `trellis-implement` / `trellis-research` name sub-agent roles dispatched through your platform's sub-agent mechanism, not skills the main session loads itself (on Claude Code: use the Task/Agent tool, never the Skill tool). `trellis-update-spec` is a skill. `trellis-check` exists as both; prefer the Agent/role form when verifying after code changes.
 Flow: `trellis-implement` -> `trellis-check` -> commit (Phase 3.4) -> `/trellis:finish-work`. Spec update (3.3) is on demand — run it when the user asks, not as part of the default flow.
-Red before green: work the `implement.md` slice checklist one slice at a time — test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice entry, then write the minimum code to pass. No horizontal slicing, no tautological assertions, no refactoring inside a red-green cycle. `kind=chore` and repos with no runnable harness must state that in the slice entry instead of skipping silently. Load the `trellis-tdd` skill for the full contract.
+Red before green: work the `implement.md` slice checklist one slice at a time — test at a seam documented in `design.md`, run it, paste the redacted red output into that slice entry, then write the minimum code to pass. No horizontal slicing, no tautological assertions, no refactoring inside a red-green cycle. `kind=chore` and repos with no runnable harness must state that in the slice entry instead of skipping silently. Load the `trellis-tdd` skill for the full contract.
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
 Green is a claim to prove: never report "tests pass" without this session's command output; a run that skipped or never entered the path is not a pass even when it prints OK; a verifier dying before its assertions is a setup failure, not a product one.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md` -> `implement.md`.
@@ -269,7 +276,7 @@ Dispatch prompt starts with `Active task: <task path from task.py current>`. Rea
 
 [workflow-state:in_progress-inline]
 Flow: `trellis-before-dev` -> edit -> `trellis-check` -> validation -> commit (Phase 3.4) -> `/trellis:finish-work`. Spec update (3.3) is on demand — run it when the user asks, not as part of the default flow.
-Red before green: work the `implement.md` slice checklist one slice at a time — test at a seam confirmed in `design.md`, run it, paste the redacted red output into that slice entry, then write the minimum code to pass. No horizontal slicing, no tautological assertions, no refactoring inside a red-green cycle. `kind=chore` and repos with no runnable harness must state that in the slice entry instead of skipping silently. Load the `trellis-tdd` skill for the full contract.
+Red before green: work the `implement.md` slice checklist one slice at a time — test at a seam documented in `design.md`, run it, paste the redacted red output into that slice entry, then write the minimum code to pass. No horizontal slicing, no tautological assertions, no refactoring inside a red-green cycle. `kind=chore` and repos with no runnable harness must state that in the slice entry instead of skipping silently. Load the `trellis-tdd` skill for the full contract.
 Do not dispatch implement/check sub-agents in inline mode.
 Green is a claim to prove: never report "tests pass" without this session's command output; a run that skipped or never entered the path is not a pass even when it prints OK; a verifier dying before its assertions is a setup failure, not a product one.
 Read context: `prd.md` -> `design.md` -> `implement.md`, plus relevant spec/research loaded by skills.
@@ -328,10 +335,10 @@ When a user request matches one of these intents inside an active task, route fi
 ### Guardrails
 
 - Never ask whether to create a task. With no active task, work inline; the user asks when they want one.
-- Creating a task is not implementation approval; implementation waits for `task.py start` after artifact review.
+- Creating a task alone is not implementation approval. After artifact review and evidence checks, reuse session authorization for the settled scope; honor any explicit planning-only instruction before `task.py start`.
 - Every task needs `prd.md`, `design.md`, and `implement.md`. There is no PRD-only tier.
 - `meta.kind` is never guessed. Without it, the red-evidence gate cannot be evaluated and `task.py start` must wait.
-- No production code before red evidence: a `bug` needs an executed repro, a `feature` needs a failing test at a confirmed seam. "Cannot build one" is a valid outcome only when written down with what was tried.
+- No production code before red evidence: a `bug` needs an executed repro, a `feature` needs a failing test at a documented seam. "Cannot build one" is a valid outcome only when written down with what was tried.
 - Planning must be persisted to task artifacts; checks must run before reporting completion.
 
 ### Loading Step Detail
@@ -490,7 +497,7 @@ Skip this step. Context is loaded directly by the `trellis-before-dev` skill in 
 
 #### 1.4 Activate task `[required · once]`
 
-After artifact review and the red-evidence gate, flip the task status to `in_progress`:
+After artifact review and the red-evidence gate, verify that the settled plan is covered by the user's implementation authorization. An earlier explicit implementation request can satisfy this gate; a planning-only request still needs approval to proceed. Then flip the task status to `in_progress`:
 
 ```bash
 python ./.trellis/scripts/task.py start <task-dir>
@@ -499,8 +506,9 @@ python ./.trellis/scripts/task.py start <task-dir>
 Before running it, all of the following must hold:
 
 - `prd.md`, `design.md`, and `implement.md` exist and have been reviewed.
+- The final planning summary has been presented, unresolved user-owned decisions are settled, and implementation authorization covers the plan.
 - `task.json` has `meta.kind`. If it does not, ask the user and set it — do not start on a guessed kind.
-- Red evidence for that kind is in place: `kind=bug` has an executed repro command plus its red output in `research/`; `kind=feature` has a user-confirmed test-seam list in `design.md`; `kind=chore` is exempt. An explicit written "no red-capable command, here is what I tried and what I need" satisfies the gate; silence does not.
+- Red evidence for that kind is in place: `kind=bug` has an executed repro command plus its red output in `research/`; `kind=feature` has a documented test-seam list in `design.md`; `kind=chore` is exempt. An explicit written "no red-capable command, here is what I tried and what I need" satisfies the gate; silence does not.
 - On sub-agent-dispatch platforms, `implement.jsonl` and `check.jsonl` both have real curated entries. Runtime consumers tolerate missing or seed-only manifests for compatibility, but that tolerance is not a planning-ready state.
 
 After this command succeeds, the breadcrumb auto-switches to `[workflow-state:in_progress]`, and the rest of Phase 2 / 3 follows.
@@ -516,8 +524,8 @@ If `task.py start` errors with a session-identity message (no context key from h
 | `implement.md` exists, with an ordered slice checklist | ✅ |
 | `task.json` has `meta.kind` (never guessed) | ✅ |
 | `kind=bug`: executed repro command + red output in `research/`, minimised | ✅ |
-| `kind=feature`: user-confirmed test-seam list in `design.md` | ✅ |
-| User confirms task should enter implementation | ✅ |
+| `kind=feature`: documented test-seam list in `design.md` | ✅ |
+| Session authorization covers implementation of the settled plan | ✅ |
 | `task.py start` has been run (status = in_progress) | ✅ |
 
 [Claude Code, codex-sub-agent]
@@ -536,7 +544,7 @@ Goal: turn reviewed planning artifacts into code that passes quality checks.
 
 **Red before green — applies on every platform.** Implementation walks the `implement.md` slice checklist one slice at a time. Per slice:
 
-1. Write the test at a seam already confirmed in `design.md`. Never invent a new seam here — if the right seam is missing, that is a Phase 1 defect; go back to 1.1.
+1. Write the test at a seam documented in `design.md`. If another seam is needed within the authorized contract, record it and its rationale before testing. Return to 1.1 only when the contract changes or a user-owned decision remains unresolved.
 2. Run it and watch it fail. Paste the redacted red output into that slice's checklist entry.
 3. Write the minimum production code to make it pass. Run it again.
 4. Move to the next slice.
@@ -552,7 +560,7 @@ For `meta.kind=bug`, the slice-1 test is the minimised reproduction from `resear
 Spawn the implement sub-agent:
 
 - **Agent type**: `trellis-implement`
-- **Task description**: Implement the reviewed task artifacts one `implement.md` slice at a time, red before green at the seams confirmed in `design.md`, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
+- **Task description**: Implement the reviewed task artifacts one `implement.md` slice at a time, red before green at the seams documented in `design.md`, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
 - **Dispatch prompt guard**: The prompt MUST start with `Active task: <task path>`, then tell the spawned agent it is already the `trellis-implement` sub-agent and must implement directly, not spawn another `trellis-implement` / `trellis-check`.
 
 The platform hook/plugin auto-handles:

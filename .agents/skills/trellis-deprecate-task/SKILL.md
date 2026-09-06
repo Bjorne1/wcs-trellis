@@ -1,6 +1,6 @@
 ---
 name: trellis-deprecate-task
-description: "Abandon a Trellis task that should not continue — wrong direction, cancelled requirement, or gone obsolete: banner-marks its docs, records meta.deprecated in task.json, and archives it. Use when the user explicitly asks to deprecate, drop, abandon, or cancel a task (废弃 / 放弃 / 方向错了 / 需求取消 / 不做了). Not for work that finished — that is finish-work."
+description: "Use when the user explicitly asks to abandon, cancel, or deprecate a Trellis task. Completed work uses trellis-finish-work."
 ---
 
 # Deprecate Task

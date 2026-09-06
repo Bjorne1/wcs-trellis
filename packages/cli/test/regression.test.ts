@@ -6177,7 +6177,7 @@ describe("regression: current-task path normalization", () => {
     const body = match?.[1] ?? "";
     expect(body).not.toMatch(/Lightweight: `prd\.md` can be enough/);
     expect(body).toMatch(
-      /Finish `prd\.md`, `design\.md`, and `implement\.md` — all three, every task/,
+      /Finish and review `prd\.md`, `design\.md`, and `implement\.md` — all three, every task/,
     );
     expect(body).toContain("Red-evidence gate keyed on `task.json` `meta.kind`");
     expect(body).toContain(

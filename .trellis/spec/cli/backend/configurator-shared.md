@@ -48,7 +48,7 @@ A helper does **not** belong in `shared.ts` when it encodes platform-specific fo
 
 `configurators/shared.ts:wrapWithSkillFrontmatter` — prefixes a resolved skill body with `---\nname: <name>\ndescription: "<desc>"\n---\n\n`. Description comes from the module-private `SKILL_DESCRIPTIONS` registry, keyed by the bare skill name (the `trellis-` prefix is stripped before lookup). Throws when the description is missing — this is intentional: a skill that ships without a description fails the AI auto-trigger matcher silently in production, so we fail loudly at init.
 
-`configurators/shared.ts:wrapWithCommandFrontmatter` — same shape for command palette entries (`---\nname: …\ndescription: …\n---`). Uses the separate `COMMAND_DESCRIPTIONS` registry. Used by a platform whose native command surface requires frontmatter. Two registries exist on purpose: skill descriptions are long prose for the AI matcher; command descriptions are one-line imperatives shown in the user-facing palette.
+`configurators/shared.ts:wrapWithCommandFrontmatter` — same shape for command palette entries (`---\nname: …\ndescription: …\n---`). Uses the separate `COMMAND_DESCRIPTIONS` registry. Used by a platform whose native command surface requires frontmatter. Skill descriptions state concise trigger conditions for the AI matcher; command descriptions are one-line imperatives for the user-facing palette. Procedures and examples belong in the skill body or references.
 
 ### High-level template resolvers
 
@@ -58,15 +58,13 @@ These return `ResolvedTemplate[]` (`{ name, content }`) and are the canonical en
 
 Pi is the exception handled in `configurators/pi.ts`: `session_start` is notify-only and cannot mutate model-visible context, so Pi keeps a generated `.pi/prompts/trellis-start.md` fallback while its extension injects compact startup context through the first `before_agent_start`. The configurator must still derive the fallback through `resolveCommands({ ...ctx, hasHooks: false })` rather than reading common command templates directly, so placeholder rendering and future command transforms stay centralized.
 
-`configurators/shared.ts:resolveSkills` — returns the 5 single-file workflow skills (`brainstorm`, `before-dev`, `check`, `break-loop`, `update-spec`) wrapped with skill frontmatter and platform-specific `{{CMD_REF}}` rendering. Used by "both" platforms — those that emit native commands AND skills.
-
-`configurators/shared.ts:resolveSkillsNeutral` — same 5 skills, but uses `resolvePlaceholdersNeutral`. Use this for any skill set destined for `.agents/skills/`.
+`configurators/shared.ts:resolveSkills` — returns the single-file workflow skills from `common/skills/` (`before-dev`, `check`, `break-loop`, `tdd`) wrapped with skill frontmatter and platform-specific `{{CMD_REF}}` rendering. Used by platforms with a private skill root. `brainstorm` and `update-spec` use the multi-file bundled-skill path so their references ship with the entrypoint.
 
 `configurators/shared.ts:resolveAllAsSkills` — folds command templates into skill format (with `trellis-` prefix and skill frontmatter). Used by skill-only platforms. (Codex needs the same fold but writes into `.agents/skills/`, so it uses the neutral variant below.) All three command templates are folded, `trellis-start` included.
 
 `configurators/shared.ts:resolveAllAsSkillsNeutral` — same, but neutral. Used by Codex for command-as-skill files in `.agents/skills/` (`trellis-continue/SKILL.md`, `trellis-finish-work/SKILL.md`, and — on no-hook platforms — `trellis-start/SKILL.md`). When more than one writer targets `.agents/skills/`, byte-identity is required; running through the neutral renderer is what makes that hold. A platform with its own command surface should keep command entrypoints there and use `resolveSkills()` for its private skill root.
 
-`configurators/shared.ts:resolveBundledSkills` — resolves multi-file built-in skills (`trellis-channel`, `trellis-meta`, `trellis-session-insight`, `trellis-spec-bootstrap` — everything under `templates/common/bundled-skills/`) into `ResolvedSkillFile[]`. Each entry has a POSIX-relative path under the skill name (e.g. `trellis-meta/references/core/template-pipeline.md`). Bundled `SKILL.md` already owns its frontmatter — this helper does **not** wrap it. Pass the result to `collectSkillTemplates()` as its third argument; omitting it drops every bundled skill from that platform.
+`configurators/shared.ts:resolveBundledSkills` — resolves everything under `templates/common/bundled-skills/`, including `trellis-brainstorm` and `trellis-update-spec`, into `ResolvedSkillFile[]`. Each entry has a POSIX-relative path under the skill name. Bundled `SKILL.md` owns its frontmatter and description; remove the old single-file template and description-registry entry when migrating a skill here. Pass the result to `collectSkillTemplates()` as its third argument so entrypoints and references are both installed and tracked for update.
 
 ### Map builders
 

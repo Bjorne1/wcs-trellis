@@ -236,25 +236,20 @@ export function resolvePlaceholdersNeutral(
 /** Skill description registry — maps template name to auto-trigger description. */
 const SKILL_DESCRIPTIONS: Record<string, string> = {
   start:
-    "Initializes an AI development session by reading workflow guides, developer identity, git status, active tasks, and project guidelines from .trellis/. Classifies incoming tasks and routes to brainstorm, direct edit, or task workflow. Use when beginning a new coding session, resuming work, starting a new task, or re-establishing project context.",
+    "Use when the user explicitly asks to start a Trellis task or invokes trellis-start.",
   continue:
-    "Resume work on the current task. Loads the workflow Phase Index, figures out which phase/step to pick up at, then pulls the step-level detail via get_context.py --mode phase. Use when coming back to an in-progress task and you need to know what to do next.",
+    "Use when the user asks to resume an existing Trellis task or recover its current workflow step.",
   "finish-work":
-    "Wrap up the current session: verify quality gate passed, remind user to commit, archive completed tasks, and record session progress to the developer journal. Use when done coding and ready to end the session.",
+    "Use when the user asks to wrap up a Trellis task or record a completed work session.",
   "deprecate-task":
-    "Abandon a Trellis task that should not continue — wrong direction, cancelled requirement, or gone obsolete: banner-marks its docs, records meta.deprecated in task.json, and archives it. Use when the user explicitly asks to deprecate, drop, abandon, or cancel a task (废弃 / 放弃 / 方向错了 / 需求取消 / 不做了). Not for work that finished — that is finish-work.",
+    "Use when the user explicitly asks to abandon, cancel, or deprecate a Trellis task. Completed work uses trellis-finish-work.",
   "before-dev":
-    "Discovers and injects project-specific coding guidelines from .trellis/spec/ before implementation begins. Reads spec indexes, pre-development checklists, and shared thinking guides for the target package. Use when starting a new coding task, before writing any code, switching to a different package, or needing to refresh project conventions and standards.",
-  brainstorm:
-    "Guides collaborative requirements discovery before implementation. Creates task directory, seeds PRD, models the work as a decision tree and asks each round's whole question frontier at once with recommendations, researches technical choices, and converges on MVP scope plus the test seams or bug reproduction the task will be verified against. Use when requirements are unclear, there are multiple valid approaches, or the user describes a new feature or complex task.",
+    "Use before editing code in a Trellis project or switching packages to load the relevant coding guidelines.",
   check:
-    "Comprehensive quality verification: spec compliance, lint, type-check, tests, cross-layer data flow, code reuse, and consistency checks. Use when code is written and needs quality verification, before committing changes, or to catch context drift during long sessions.",
-  tdd:
-    "Red-before-green contract for behavior work: build a red-capable command that asserts the exact symptom or desired behavior, watch it fail, then write the minimum code to pass, one slice at a time. Covers bug reproduction and minimisation, test-seam confirmation, and the explicit no-harness fallback. Use when reproducing a reported bug, writing a failing test, or implementing a slice of a feature that changes behavior.",
+    "Use after code changes or before committing to verify Trellis spec compliance and the relevant quality checks.",
+  tdd: "Use when reproducing a bug or implementing a behavior change with a failing test before the fix.",
   "break-loop":
-    "Deep bug analysis to break the fix-forget-repeat cycle. Analyzes root cause category, why fixes failed, prevention mechanisms, and captures knowledge into specs. Use after fixing a bug to prevent the same class of bugs.",
-  "update-spec":
-    "Captures executable contracts and coding conventions into .trellis/spec/ documents. Use when learning something valuable from debugging, implementing, or discussion that should be preserved for future sessions.",
+    "Use after repeated or difficult debugging to identify the root cause and prevent recurrence.",
 };
 
 /**

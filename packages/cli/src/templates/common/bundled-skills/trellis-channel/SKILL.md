@@ -1,6 +1,6 @@
 ---
 name: trellis-channel
-description: Use Trellis channel for live multi-agent collaboration, spawned workers, cross-agent review, progress inspection, forum channels, and channel log debugging.
+description: "Use for Trellis channel sessions: worker dispatch, collaboration progress, forum threads, and channel log debugging."
 ---
 
 # trellis-channel
